@@ -30,6 +30,7 @@ import {
 } from "@/lib/crypto";
 import {
   getDocumentHistory,
+  getDocumentFromHistory,
   saveToHistory,
   removeFromHistory,
   extractTitle,
@@ -149,13 +150,14 @@ export default function Home() {
 
         setContent(decryptedContent);
 
-        // Save to history
+        // Save to history (preserve original createdAt if it exists)
+        const existing = getDocumentFromHistory(id);
         saveToHistory({
           id,
           encryptionKey: keyString,
           writeToken: tokenString || "",
           title: extractTitle(decryptedContent),
-          createdAt: Date.now(),
+          createdAt: existing?.createdAt ?? Date.now(),
           lastModified: Date.now(),
         });
         setDocumentHistory(getDocumentHistory());
@@ -305,13 +307,14 @@ export default function Home() {
         throw new Error(error.error || "Failed to update document");
       }
 
-      // Update in history
+      // Update in history (preserve original createdAt)
+      const existing = getDocumentFromHistory(documentId);
       saveToHistory({
         id: documentId,
         encryptionKey: encryptionKey,
         writeToken: writeToken || "",
         title: extractTitle(content),
-        createdAt: Date.now(),
+        createdAt: existing?.createdAt ?? Date.now(),
         lastModified: Date.now(),
       });
 

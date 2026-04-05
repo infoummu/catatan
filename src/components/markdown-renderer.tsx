@@ -5,7 +5,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import rehypeHighlight from "rehype-highlight";
 import "katex/dist/katex.min.css";
@@ -251,7 +250,7 @@ export function MarkdownRenderer({
 
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
-        rehypePlugins={[rehypeKatex, rehypeRaw, rehypeHighlight]}
+        rehypePlugins={[rehypeKatex, rehypeHighlight]}
       >
         {content}
       </ReactMarkdown>

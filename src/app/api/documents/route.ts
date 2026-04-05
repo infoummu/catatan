@@ -50,10 +50,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Limit encrypted content size to 1MB
-    if (encryptedContent.length > 1024 * 1024 * 10) {
+    // Limit encrypted content size to 2MB
+    if (encryptedContent.length > 1024 * 1024 * 2) {
       return NextResponse.json(
-        { error: "Document too large (max 1MB)" },
+        { error: "Document too large (max 2MB)" },
         { status: 413 },
       );
     }

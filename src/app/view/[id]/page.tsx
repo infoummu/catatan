@@ -6,7 +6,7 @@ import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { FileText, AlertCircle, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { importKey, decrypt } from "@/lib/crypto";
-import { saveToHistory, extractTitle } from "@/lib/document-history";
+import { getDocumentFromHistory, saveToHistory, extractTitle } from "@/lib/document-history";
 
 export default function ViewPage() {
   const params = useParams();
@@ -51,15 +51,15 @@ export default function ViewPage() {
 
         setContent(decryptedContent);
 
-        // Save to history
-        const now = Date.now();
+        // Save to history (preserve original createdAt if it exists)
+        const existing = getDocumentFromHistory(id);
         saveToHistory({
           id,
           encryptionKey: keyString,
           writeToken: tokenString || "",
           title: extractTitle(decryptedContent),
-          createdAt: now,
-          lastModified: now,
+          createdAt: existing?.createdAt ?? Date.now(),
+          lastModified: Date.now(),
         });
       } catch (err) {
         console.error("Error loading document:", err);
