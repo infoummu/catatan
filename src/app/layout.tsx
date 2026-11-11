@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/contexts/theme-context";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "markdown.gg - Zero-knowledge Markdown Sharing",
+  title: "Catatan — Zero-knowledge Markdown Sharing",
   description: "Share markdown documents with end-to-end encryption",
 };
 

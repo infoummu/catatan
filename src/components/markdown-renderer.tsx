@@ -124,6 +124,23 @@ export function MarkdownRenderer({
           padding-left: 1.5rem;
         }
 
+        /* Tailwind Preflight mereset list-style; kembalikan penanda list */
+        .prose ul {
+          list-style: disc;
+        }
+
+        .prose ul ul {
+          list-style: circle;
+        }
+
+        .prose ol {
+          list-style: decimal;
+        }
+
+        .prose li::marker {
+          color: ${isDark ? "#9ca3af" : "#6b7280"};
+        }
+
         .prose li {
           margin: 0.25rem 0;
         }

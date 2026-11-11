@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, documents } from "@/db";
+import { getDb } from "@/db";
 import { generateId } from "@/lib/crypto";
 import { eq } from "drizzle-orm";
 import {
@@ -17,6 +17,8 @@ import {
  */
 export async function POST(request: NextRequest) {
   try {
+    const { db, documents } = getDb();
+
     // Rate limiting
     const clientIp = getClientIp(request);
     const rateLimitResult = checkRateLimit(
@@ -58,16 +60,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique ID
-    const id = generateId();
+    // Generate unique ID (10 karakter) — ulangi bila bentrok
+    let id = generateId();
+    let created = false;
 
-    // Store in database
-    await db.insert(documents).values({
-      id,
-      encryptedContent,
-      writeTokenHash,
-      createdAt: new Date(),
-    });
+    for (let attempt = 0; attempt < 5 && !created; attempt++) {
+      try {
+        await db.insert(documents).values({
+          id,
+          encryptedContent,
+          writeTokenHash,
+          createdAt: new Date(),
+        });
+        created = true;
+      } catch (error: any) {
+        const message = String(error?.message || "");
+        if (message.includes("UNIQUE") || message.includes("constraint")) {
+          id = generateId();
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!created) {
+      return NextResponse.json(
+        { error: "Failed to allocate document id" },
+        { status: 500 },
+      );
+    }
 
     const response = NextResponse.json({ id }, { status: 201 });
     return addRateLimitHeaders(

@@ -1,0 +1,26 @@
+name: markdowngg
+
+services:
+  web:
+    container_name: markdowngg
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: markdowngg:latest
+    ports:
+      - "8089:3000"
+    volumes:
+      # database SQLite persist di host
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Jayapura
+      - DATABASE_URL=file:/app/data/sqlite.db
+    security_opt:
+      # Fedora/SELinux: izinkan kontainer menulis folder host
+      - label=disable
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

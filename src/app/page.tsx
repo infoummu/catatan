@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { DragEvent } from "react";
 import { Editor } from "@/components/editor";
+import type { EditorHandle, FormatKind } from "@/components/editor";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { DocumentSidebar } from "@/components/document-sidebar";
 import { Button } from "@/components/ui/button";
@@ -18,7 +20,23 @@ import {
   X,
   Sun,
   Moon,
+  Bold,
+  Italic,
+  Strikethrough,
+  Heading1,
+  Heading2,
+  Link2,
+  List,
+  ListOrdered,
+  Quote,
+  Code2,
+  Minus,
+  Columns2,
+  PenLine,
+  Eye,
+  Download,
 } from "lucide-react";
+import { downloadHtmlFile, printPdf } from "@/lib/export";
 import {
   generateKey,
   exportKey,
@@ -37,7 +55,7 @@ import {
   DocumentMetadata,
 } from "@/lib/document-history";
 
-const DEFAULT_CONTENT = `# Welcome to markdown.gg
+const DEFAULT_CONTENT = `# Welcome to Catatan
 
 A zero-knowledge markdown editor with **LaTeX** support.
 
@@ -78,6 +96,21 @@ function hello(name) {
 Start editing to see your changes!
 `;
 
+const TOOLBAR: { kind: FormatKind; Icon: typeof Bold; title: string }[] = [
+  { kind: "bold", Icon: Bold, title: "Bold (Ctrl+B)" },
+  { kind: "italic", Icon: Italic, title: "Italic (Ctrl+I)" },
+  { kind: "strike", Icon: Strikethrough, title: "Strikethrough" },
+  { kind: "h1", Icon: Heading1, title: "Heading 1" },
+  { kind: "h2", Icon: Heading2, title: "Heading 2" },
+  { kind: "link", Icon: Link2, title: "Link (Ctrl+K)" },
+  { kind: "ul", Icon: List, title: "Bullet list" },
+  { kind: "ol", Icon: ListOrdered, title: "Numbered list" },
+  { kind: "quote", Icon: Quote, title: "Blockquote" },
+  { kind: "code", Icon: Code2, title: "Inline code" },
+  { kind: "codeblock", Icon: FileText, title: "Code block" },
+  { kind: "hr", Icon: Minus, title: "Horizontal rule" },
+];
+
 export default function Home() {
   const [content, setContent] = useState(DEFAULT_CONTENT);
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -94,6 +127,14 @@ export default function Home() {
   const [isResizing, setIsResizing] = useState(false);
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor");
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [viewMode, setViewMode] = useState<"split" | "editor" | "preview">(
+    "split",
+  );
+  const [isDragging, setIsDragging] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const editorApi = useRef<EditorHandle | null>(null);
+  const exportRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
   const { theme, toggleTheme } = useTheme();
 
@@ -112,6 +153,7 @@ export default function Home() {
         setEncryptionKey(null);
         setWriteToken(null);
         setContent(DEFAULT_CONTENT);
+        setSavedSnapshot(null);
         return;
       }
 
@@ -149,8 +191,7 @@ export default function Home() {
         const decryptedContent = await decrypt(encryptedContent, key);
 
         setContent(decryptedContent);
-
-        // Save to history (preserve original createdAt if it exists)
+        setSavedSnapshot(decryptedContent);
         const existing = getDocumentFromHistory(id);
         saveToHistory({
           id,
@@ -232,7 +273,7 @@ export default function Home() {
   // Get read-only shareable URL (view only, no write token)
   const getReadOnlyUrl = () => {
     if (!documentId || !encryptionKey) return null;
-    return `${window.location.origin}/view/${documentId}#${encryptionKey}`;
+    return `${window.location.origin}/s/${documentId}#${encryptionKey}`;
   };
 
   // Get editable shareable URL (with write token)
@@ -319,6 +360,7 @@ export default function Home() {
       });
 
       setDocumentHistory(getDocumentHistory());
+      setSavedSnapshot(content);
 
       toast({
         title: "Saved",
@@ -380,6 +422,7 @@ export default function Home() {
       });
 
       setDocumentHistory(getDocumentHistory());
+      setSavedSnapshot(content);
 
       // Navigate to the new document URL (with write token)
       window.location.hash = `${id}#${keyString}&write=${token}`;
@@ -438,8 +481,93 @@ export default function Home() {
     });
   }
 
+  const isReadOnly = documentId !== null && !writeToken;
+  const isDirty = documentId !== null && savedSnapshot !== content;
+  const docTitle = extractTitle(content);
+
+  function exportBodyHtml(): string {
+    return exportRef.current?.innerHTML?.trim() || "<p></p>";
+  }
+
+  function handleExportHtml() {
+    try {
+      downloadHtmlFile(docTitle, exportBodyHtml());
+      toast({
+        title: "Exported",
+        description: "HTML file downloaded",
+      });
+    } catch (error) {
+      console.error("Export HTML gagal:", error);
+      toast({
+        title: "Export failed",
+        description: "Try again",
+        variant: "destructive",
+      });
+    }
+  }
+
+  function handleExportPdf() {
+    const ok = printPdf(docTitle, exportBodyHtml());
+    if (!ok) {
+      toast({
+        title: "Popup blocked",
+        description: "Allow popups to create PDF",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleDropFile(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer?.files?.[0];
+    if (!file) return;
+
+    if (!/\.(md|markdown|txt)$/i.test(file.name)) {
+      toast({
+        title: "Unsupported file",
+        description: "Use .md or .txt",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Max 1 MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (documentId) {
+      toast({
+        title: "Document already shared",
+        description: "Click New before opening another file",
+      });
+      return;
+    }
+
+    const text = await file.text();
+    setContent(text);
+    setSavedSnapshot(null);
+    toast({ title: "File loaded", description: file.name });
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div
+      className="flex flex-col h-screen bg-background relative"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setIsDragging(false);
+      }}
+      onDrop={handleDropFile}
+    >
       {/* Header */}
       <header className="border-b border-border px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -457,7 +585,25 @@ export default function Home() {
           </Button>
 
           <FileText className="w-5 h-5" />
-          <h1 className="text-base font-semibold">markdown.gg</h1>
+          <h1 className="text-base font-semibold">Catatan</h1>
+
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground ml-1">
+            {!documentId ? (
+              "Local draft"
+            ) : isSaving ? (
+              "Saving…"
+            ) : isDirty ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Unsaved
+              </>
+            ) : (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Saved
+              </>
+            )}
+          </span>
 
           {documentId && (
             <div className="relative ml-4">
@@ -520,6 +666,48 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <Button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 px-2"
+              title="Export dokumen"
+            >
+              <Download className="w-4 h-4" />
+              <span className="text-xs hidden sm:inline">Export</span>
+            </Button>
+
+            {showExportMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowExportMenu(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 w-40 bg-popover border border-border rounded-md shadow-lg z-20 py-1">
+                  <button
+                    onClick={() => {
+                      handleExportHtml();
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                  >
+                    HTML (.html)
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleExportPdf();
+                      setShowExportMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                  >
+                    PDF (print)
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
           <Button
             onClick={toggleTheme}
             size="sm"
@@ -584,6 +772,57 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Toolbar format + mode tampilan */}
+      <div className="flex items-center gap-0.5 border-b border-border px-2 py-1 overflow-x-auto">
+        {TOOLBAR.map(({ kind, Icon, title }) => (
+          <button
+            key={kind}
+            title={title}
+            disabled={isReadOnly}
+            onClick={() => editorApi.current?.format(kind)}
+            className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent transition-colors flex-shrink-0"
+          >
+            <Icon className="w-4 h-4" />
+          </button>
+        ))}
+
+        <div className="ml-auto flex items-center gap-0.5 rounded-md border border-border p-0.5 flex-shrink-0">
+          <button
+            onClick={() => setViewMode("split")}
+            title="Split view"
+            className={`h-6 w-7 flex items-center justify-center rounded ${
+              viewMode === "split"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Columns2 className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setViewMode("editor")}
+            title="Editor only"
+            className={`h-6 w-7 flex items-center justify-center rounded ${
+              viewMode === "editor"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <PenLine className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setViewMode("preview")}
+            title="Preview only"
+            className={`h-6 w-7 flex items-center justify-center rounded ${
+              viewMode === "preview"
+                ? "bg-accent text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
       {/* Mobile Tabs (visible on small screens) */}
       <div className="md:hidden flex border-b border-border">
         <button
@@ -628,7 +867,13 @@ export default function Home() {
         {/* Mobile View: Single Panel with Tabs */}
         <div className="flex-1 overflow-hidden md:hidden">
           {activeTab === "editor" ? (
-            <Editor value={content} onChange={setContent} theme={theme} readOnly={documentId !== null && !writeToken} />
+            <Editor
+              value={content}
+              onChange={setContent}
+              theme={theme}
+              readOnly={isReadOnly}
+              apiRef={editorApi}
+            />
           ) : (
             <div className="h-full overflow-auto">
               <MarkdownRenderer content={content} theme={theme} />
@@ -636,29 +881,63 @@ export default function Home() {
           )}
         </div>
 
-        {/* Desktop View: Split Panel with Resizable Divider */}
+        {/* Desktop View: Split / Editor only / Preview only */}
         <div className="hidden md:flex flex-1 overflow-hidden editor-preview-container">
-          {/* Editor */}
-          <div style={{ width: `${editorWidth}%` }} className="overflow-hidden">
-            <Editor value={content} onChange={setContent} theme={theme} readOnly={documentId !== null && !writeToken} />
-          </div>
+          {viewMode !== "preview" && (
+            <div
+              style={{
+                width: viewMode === "editor" ? "100%" : `${editorWidth}%`,
+              }}
+              className="overflow-hidden"
+            >
+              <Editor
+                value={content}
+                onChange={setContent}
+                theme={theme}
+                readOnly={isReadOnly}
+                apiRef={editorApi}
+              />
+            </div>
+          )}
 
-          {/* Resizable Divider */}
-          <div
-            onMouseDown={() => setIsResizing(true)}
-            className="w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-shrink-0 relative group"
-          >
-            <div className="absolute inset-y-0 -left-1 -right-1" />
-          </div>
+          {viewMode === "split" && (
+            <div
+              onMouseDown={() => setIsResizing(true)}
+              className="w-1 bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-shrink-0 relative group"
+            >
+              <div className="absolute inset-y-0 -left-1 -right-1" />
+            </div>
+          )}
 
-          {/* Preview */}
-          <div
-            style={{ width: `${100 - editorWidth}%` }}
-            className="overflow-auto"
-          >
-            <MarkdownRenderer content={content} theme={theme} />
+          {viewMode !== "editor" && (
+            <div
+              style={{
+                width:
+                  viewMode === "preview" ? "100%" : `${100 - editorWidth}%`,
+              }}
+              className="overflow-auto"
+            >
+              <MarkdownRenderer content={content} theme={theme} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Overlay drag & drop */}
+      {isDragging && (
+        <div className="absolute inset-0 z-50 bg-background/85 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <div className="border-2 border-dashed border-primary/60 rounded-xl px-10 py-8 text-center">
+            <p className="text-sm font-medium">Drop file to open</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              .md or .txt — max 1 MB
+            </p>
           </div>
         </div>
+      )}
+
+      {/* Preview tersembunyi: sumber HTML untuk export */}
+      <div ref={exportRef} className="hidden" aria-hidden="true">
+        <MarkdownRenderer content={content} theme={theme} />
       </div>
     </div>
   );

@@ -4,7 +4,9 @@
  */
 
 const ALGORITHM = "AES-GCM";
-const KEY_LENGTH = 256;
+// 128-bit: tetap aman (AES-128) dan membuat link share jauh lebih pendek.
+// Kunci lama 256-bit tetap bisa dibuka karena panjangnya dideteksi saat import.
+const KEY_LENGTH = 128;
 const IV_LENGTH = 12; // 96 bits recommended for AES-GCM
 
 /**
@@ -39,7 +41,8 @@ export async function importKey(keyString: string): Promise<CryptoKey> {
     keyData,
     {
       name: ALGORITHM,
-      length: KEY_LENGTH,
+      // ikuti panjang kunci asli (128-bit untuk link baru, 256-bit untuk link lama)
+      length: keyData.byteLength * 8,
     },
     true,
     ["encrypt", "decrypt"]
@@ -108,12 +111,25 @@ export async function decrypt(
 
 /**
  * Generate a random document ID
+ * 10 karakter base62 (~59 bit) supaya link share pendek, tetap aman dari tebakan.
  */
-export function generateId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+const ID_ALPHABET =
+  "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const ID_LENGTH = 10;
+
+export function generateId(length: number = ID_LENGTH): string {
+  let out = "";
+  // rejection sampling supaya distribusi rata (256 % 62 = 8)
+  const limit = 256 - (256 % ID_ALPHABET.length);
+  while (out.length < length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length));
+    for (const b of bytes) {
+      if (b < limit && out.length < length) {
+        out += ID_ALPHABET[b % ID_ALPHABET.length];
+      }
+    }
+  }
+  return out;
 }
 
 /**

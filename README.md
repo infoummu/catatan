@@ -1,131 +1,187 @@
-# markdown.gg
+# Catatan
 
-A zero-knowledge markdown editor and sharing service with LaTeX support.
+Editor markdown self-hosted dengan **share link terenkripsi end-to-end (zero-knowledge)**.
+Tulis di browser, enkripsi terjadi di browser, server hanya menyimpan ciphertext.
 
-## Features
+- Demo: <https://catatan.elyas.site>
+- Kebutuhan: Node.js 20.9+ atau Docker
 
-- **Zero-knowledge encryption**: All content is encrypted client-side with AES-GCM
-- **Document history**: Access all your shared documents from a sidebar
-- **Updatable shares**: Save changes to your shared documents without creating new links
-- **Side-by-side editor**: Monaco editor with live markdown preview
-- **LaTeX support**: Render mathematical equations with KaTeX
-- **GitHub Flavored Markdown**: Tables, task lists, strikethrough, and more
-- **Light/Dark themes**: Toggle between light and dark modes
-- **Minimal design**: Clean black and white aesthetic
-- **Database flexibility**: SQLite for local development, PostgreSQL for production
+---
 
-## How It Works
+## Asal-usul proyek (penting)
 
-1. Write markdown in the editor
-2. Click "Share" to generate a unique link (first time)
-3. Content is encrypted client-side before sending to the server
-4. The encryption key is stored in the URL hash (never sent to the server)
-5. Share the link with others to let them view your document
-6. Click "Save" to update the shared document with your changes
-7. Viewers see updates when they refresh the shared link
+Repo ini **bukan proyek dari nol**. Asalnya adalah **markdowngg** — <https://github.com/xatuke/markdowngg>,
+"a zero-knowledge, self-hostable markdown-as-docs-service" — lalu di-*fork* dan dimodifikasi menjadi **Catatan**:
 
-### Installation
+1. **Rebranding** dari `markdown.gg` menjadi **Catatan** (judul header, halaman share, judul tab, konten sambutan).
+2. **Perbaikan agar benar-benar bisa jalan**: tabel SQLite dibuat otomatis (`CREATE TABLE IF NOT EXISTS`),
+   inisialisasi database dibuat *lazy* (sebelumnya `next build` gagal `SQLITE_BUSY`), dan route share
+   dipisah agar bisa memakai link pendek.
+3. **Penambahan fitur yang terinspirasi dari [mymarkdown.xyz](https://mymarkdown.xyz)** — bukan port kode,
+   hanya ide UX yang diimplementasikan ulang:
+   - toolbar format (bold, italic, strikethrough, heading, link, list, quote, code, HR)
+   - mode tampilan **Split / Editor only / Preview only**
+   - export dokumen (HTML & PDF)
+   - drag & drop file `.md` / `.txt`
+   - indikator status penyimpanan (Local draft / Saved / Unsaved)
+4. **Packaging Docker** (multi-stage, output Next.js standalone) + `docker-compose.yml` untuk self-hosting.
+
+Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada di bagian
+[Lisensi & kredit](#lisensi--kredit).
+
+---
+
+## Fitur
+
+### Bawaan dari markdowngg
+
+- Enkripsi **AES-GCM** sepenuhnya di sisi klien (Web Crypto API)
+- **Share link** terpisah: read-only dan editable (dengan write token)
+- Dokumen bisa **diperbarui tanpa mengganti link**
+- Editor **Monaco** + preview markdown live
+- **KaTeX** untuk LaTeX, **GitHub Flavored Markdown** (tabel, task list, strikethrough)
+- Tema terang/gelap
+- Riwayat dokumen di `localStorage` (maks 50)
+- Dukungan SQLite (default) atau PostgreSQL
+- Rate limiting per IP
+
+### Tambahan di repo ini
+
+- **Rebranding Catatan** + konten sambutan baru
+- **Tabel `documents` dibuat otomatis** saat pertama dipakai, jadi tidak perlu `drizzle-kit push` manual
+- **Inisialisasi DB lazy** (`getDb()`), aman terhadap `next build` yang menjalankan banyak worker sekaligus
+- **Toolbar format** 12 tombol + shortcut `Ctrl+B` / `Ctrl+I` / `Ctrl+K`
+- **Mode tampilan** Split / Editor only / Preview only
+- **Export HTML** (file mandiri) dan **PDF** (dialog print browser — hasil vektor, teks tetap bisa diseleksi)
+- **Drag & drop** `.md` / `.txt` (maks 1 MB) dengan overlay petunjuk
+- **Indikator status**: `Local draft` → `Saved` → `Unsaved`
+- **Perbaikan bullet list** di preview (Tailwind Preflight menghapus `list-style`)
+- **Perbaikan warna halaman share**: teks mengikuti tema pembaca (sebelumnya selalu palet gelap sehingga
+  nyaris tak terbaca pada tema terang)
+- **Link share pendek** `/s/<id>#<key>` — 62 karakter (sebelumnya 108 karakter)
+- **Dockerfile + docker-compose** siap pakai (port 8089)
+
+### Rencana (belum dikerjakan)
+
+- Masa berlaku link (expiry) dan link berpassword
+- Beberapa invite link dengan hak berbeda per dokumen
+- Daftar dokumen lintas perangkat (sekarang masih per-browser)
+- Kolaborasi realtime — ditunda karena bertabrakan dengan model zero-knowledge
+
+---
+
+## Cara kerja
+
+1. Tulis markdown di editor (Monaco), preview ter-render di panel kanan.
+2. Klik **Share** → browser membuat kunci acak, mengenkripsi isi, lalu mengirim **ciphertext** ke server.
+3. Server menyimpan ciphertext dan hash SHA-256 dari *write token*; isi dokumen tidak bisa dibaca server.
+4. **Kunci enkripsi disimpan di URL fragment** (`#...`), yang tidak pernah dikirim ke server.
+5. Link **read-only** membuka `/s/<id>#<key>`; link **editable** membawa `&write=<token>`.
+6. Penerima mendekripsi di browser masing-masing. Server hanya melihat blob terenkripsi.
+
+Detail teknis:
+
+| Aspek | Nilai |
+| --- | --- |
+| Algoritma | AES-GCM, IV 12 byte acak per enkripsi |
+| Panjang kunci | **128-bit** untuk link baru (22 karakter base64url); 256-bit lama tetap didukung |
+| ID dokumen | 10 karakter base62 (baru), 32 hex (lama) |
+| Write token | 32 byte acak, disimpan sebagai hash SHA-256 |
+| Batas ukuran | 2 MB ciphertext per dokumen |
+
+**Kompatibilitas:** link lama `/view/<32-hex>#<kunci-256-bit>` masih berfungsi penuh.
+Route `/view/[id]` dipertahankan di samping `/s/[id]`.
+
+---
+
+## Menjalankan
+
+### Docker (cara yang dipakai di produksi)
 
 ```bash
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env
-
-# Push database schema
-npm run db:push
-
-# Start development server
-npm run dev
+mkdir -p data && chown 1000:1000 data   # container berjalan sebagai user node (uid 1000)
+docker compose up -d --build
 ```
 
-The application will be available at `http://localhost:3000`.
+- Aplikasi: <http://localhost:8089> (host 8089 → container 3000)
+- Database: `./data/sqlite.db` (bind mount, persist antar restart)
 
-### Database Configuration
-
-#### SQLite (Local Development)
-
-The default configuration uses SQLite:
+Variabel lingkungan penting:
 
 ```env
-DATABASE_URL=file:./sqlite.db
+DATABASE_URL=file:/app/data/sqlite.db   # atau postgresql://user:pass@host:5432/db
+PORT=3000
+TZ=Asia/Jayapura
 ```
 
-#### PostgreSQL (Production)
-
-For production, update `.env`:
-
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/markdowngg
-```
-
-Then run migrations:
+### Development lokal
 
 ```bash
-npm run db:push
+npm ci
+cp .env.example .env        # DATABASE_URL=file:./sqlite.db
+npm run dev                 # http://localhost:3000
 ```
 
-## Usage
+> **npm 12+**: install script dependency diblokir secara default sehingga binary native
+> `better-sqlite3` tidak ikut terpasang. `package.json` di repo ini sudah memuat `allowScripts`.
+> Bila memakai versi npm lain dan muncul `Could not locate the bindings file`:
+> `npm rebuild better-sqlite3`.
 
-### Creating and Sharing a Document
+### Catatan HTTPS (penting untuk fitur share)
 
-1. Open the application
-2. Write your markdown in the left pane
-3. See the live preview in the right pane
-4. Click "Share" to create a shareable link
-5. The link is copied to your clipboard automatically
+`crypto.subtle` hanya tersedia pada **secure context** — HTTPS atau `localhost`.
+Jika aplikasi dibuka lewat `http://192.168.x.x:8089`, editor dan preview tetap jalan, tetapi
+tombol **Share/Save** akan gagal. Tempatkan di belakang reverse proxy TLS
+(Cloudflare Tunnel, nginx, Caddy, dsb).
 
-### Updating a Shared Document
+---
 
-Once you've shared a document:
-1. Continue editing in the editor
-2. Click "Save" to update the shared document
-3. The share link remains the same
-4. Anyone with the link will see updates when they refresh
+## Route & API
 
-### Accessing Your Documents
+| Route | Keterangan |
+| --- | --- |
+| `/` | Editor (dokumen aktif disimpan di URL fragment) |
+| `/s/<id>#<key>` | Halaman share format baru (pendek) |
+| `/view/<id>#<key>` | Halaman share format lama (tetap didukung) |
+| `POST /api/documents` | Simpan dokumen baru (ciphertext + hash write token) |
+| `GET /api/documents/<id>` | Ambil ciphertext |
+| `PUT /api/documents/<id>` | Perbarui ciphertext (butuh write token) |
 
-1. Click the menu icon (☰) in the top left to open the document sidebar
-2. See all your previously shared documents with their titles and last modified times
-3. Click on any document to load it
-4. Remove documents from history by clicking the X button
+Rate limit bawaan (in-memory, per IP): 10 pembuatan/jam, 30 update/jam per dokumen, 100 pembacaan/jam.
 
-### Starting a New Document
+---
 
-Click "New" to clear the editor and start fresh. This doesn't delete your previous documents from history.
+## Struktur singkat
 
-### Viewing a Shared Document
-
-Open the shared link in your browser. The document will be decrypted automatically using the key in the URL hash. Shared documents are read-only.
-
-### Document History
-
-All shared documents are stored locally in your browser's localStorage along with their encryption keys. This means:
-- Your document list persists across browser sessions
-- Documents are private to your browser
-- Up to 50 most recent documents are kept
-- Clearing browser data will remove your document history (but documents remain on the server)
-
-### LaTeX Example
-
-Inline: `$E = mc^2$`
-
-Block:
 ```
-$$
-\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}
-$$
+src/app/            route Next.js (editor, /s, /view, API)
+src/components/     editor Monaco, renderer markdown, sidebar, document-view
+src/lib/            crypto (AES-GCM), export HTML/PDF, riwayat dokumen, rate limit
+src/db/             drizzle + inisialisasi SQLite (lazy, auto-create tabel)
+Dockerfile          multi-stage, output Next.js standalone
+docker-compose.yml  service web, port 8089, volume ./data
 ```
 
-## Security
+---
 
-- All encryption happens client-side using the Web Crypto API
-- Encryption keys are never sent to the server
-- Keys are stored in URL fragments (hash), which are not sent in HTTP requests
-- The server only stores encrypted content
+## Keamanan & batasan
 
+- Server tidak pernah menerima kunci maupun plaintext; yang tersimpan hanya ciphertext.
+- Siapa pun yang memegang **link read-only** dapat membaca; pemegang **link editable** dapat mengubah.
+  Tidak ada autentikasi pengguna.
+- Kunci 128-bit pada link baru setara AES-128 (belum pernah dipecah). Untuk pilihan lebih konservatif,
+  ubah `KEY_LENGTH` di `src/lib/crypto.ts` menjadi `256` — link akan lebih panjang.
+- Rate limit disimpan di memori: hilang saat container restart.
+- Folder `data/` tidak di-commit (berisi database). Jangan pernah commit `*.db`.
 
-## License
+---
 
-MIT
+## Lisensi & kredit
+
+Dirilis di bawah **MIT License** (lihat [`LICENSE`](./LICENSE)).
+
+- **Source asli:** [markdowngg](https://github.com/xatuke/markdowngg) oleh **xatuke** — proyek
+  zero-knowledge markdown editor yang menjadi dasar repo ini.
+- **Inspirasi fitur:** [mymarkdown.xyz](https://mymarkdown.xyz) — terutama toolbar format, mode tampilan,
+  export dokumen, dan drag & drop.
+- **Modifikasi & packaging:** Informatika UMMU Ternate.

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db, documents } from "@/db";
+import { getDb } from "@/db";
 import { eq } from "drizzle-orm";
 import {
   checkRateLimit,
@@ -20,6 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const { db, documents } = getDb();
     const { id } = await params;
 
     if (!id) {
@@ -100,6 +101,8 @@ export async function PUT(
         { status: 400 },
       );
     }
+
+    const { db, documents } = getDb();
 
     // Rate limiting per document ID (prevents spam updates to same doc)
     const rateLimitResult = checkRateLimit(
