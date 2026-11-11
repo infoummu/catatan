@@ -5,6 +5,7 @@ import type { DragEvent } from "react";
 import { Editor } from "@/components/editor";
 import type { EditorHandle, FormatKind } from "@/components/editor";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
+import { Footer } from "@/components/footer";
 import { DocumentSidebar } from "@/components/document-sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -939,6 +940,8 @@ export default function Home() {
       <div ref={exportRef} className="hidden" aria-hidden="true">
         <MarkdownRenderer content={content} theme={theme} />
       </div>
+
+      <Footer />
     </div>
   );
 }

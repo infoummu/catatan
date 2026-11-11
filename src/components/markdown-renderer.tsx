@@ -31,7 +31,7 @@ export function MarkdownRenderer({
 
   return (
     <div
-      className={`prose ${isDark ? "prose-invert" : ""} prose-sm max-w-none p-6 overflow-auto h-full`}
+      className={`prose relative ${isDark ? "prose-invert" : ""} prose-sm max-w-none p-6 overflow-auto h-full`}
       style={{
         fontSize: "14px",
         lineHeight: "1.6",

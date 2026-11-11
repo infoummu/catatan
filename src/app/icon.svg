@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Catatan">
+  <rect width="64" height="64" rx="14" fill="#141414"/>
+  <path
+    d="M41.9 22.1 A 14 14 0 1 0 41.9 41.9"
+    fill="none"
+    stroke="#f2f2f2"
+    stroke-width="7"
+    stroke-linecap="round"
+  />
+</svg>

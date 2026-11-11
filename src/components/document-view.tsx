@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
-import { FileText, AlertCircle, Edit } from "lucide-react";
+import { FileText, AlertCircle, Edit, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Footer } from "@/components/footer";
 import { importKey, decrypt } from "@/lib/crypto";
 import { getDocumentFromHistory, saveToHistory, extractTitle } from "@/lib/document-history";
 import { useTheme } from "@/contexts/theme-context";
@@ -106,17 +107,32 @@ export function DocumentView() {
           </span>
         </div>
 
-        {writeToken && !isLoading && !error && (
+        <div className="flex items-center gap-2">
+          {writeToken && !isLoading && !error && (
+            <Button
+              onClick={openInEditor}
+              size="sm"
+              className="gap-2"
+              title="Open in editor"
+            >
+              <Edit className="w-4 h-4" />
+              <span className="hidden sm:inline">Edit</span>
+            </Button>
+          )}
+
           <Button
-            onClick={openInEditor}
+            onClick={() => {
+              window.location.href = "/";
+            }}
             size="sm"
-            className="gap-2"
-            title="Open in editor"
+            variant="outline"
+            className="h-8 w-8 p-0"
+            title="New note"
+            aria-label="New note"
           >
-            <Edit className="w-4 h-4" />
-            <span className="hidden sm:inline">Edit</span>
+            <Plus className="w-4 h-4" />
           </Button>
-        )}
+        </div>
       </header>
 
       {/* Content */}
@@ -140,6 +156,8 @@ export function DocumentView() {
 
         {content && <MarkdownRenderer content={content} theme={theme} />}
       </div>
+
+      <Footer newNoteHref="/" />
     </div>
   );
 }

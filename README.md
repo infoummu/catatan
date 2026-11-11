@@ -59,6 +59,11 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
 - **Perbaikan warna halaman share**: teks mengikuti tema pembaca (sebelumnya selalu palet gelap sehingga
   nyaris tak terbaca pada tema terang)
 - **Link share pendek** `/s/<id>#<key>` — 62 karakter (sebelumnya 108 karakter)
+- **Favicon monogram "C"** (`src/app/icon.svg`) + `apple-icon.png` untuk iOS
+- **Footer** `© <tahun> Catatan` di editor dan halaman share
+- **Tombol `+` di header halaman share** dan tautan "Buat catatan baru" di footer,
+  supaya pembaca link bisa langsung membuat catatan sendiri
+- **Perbaikan overscroll**: latar halaman mengikuti tema (KaTeX sebelumnya membuat area putih muncul saat discroll)
 - **Dockerfile + docker-compose** siap pakai (port 8089)
 
 ### Rencana (belum dikerjakan)

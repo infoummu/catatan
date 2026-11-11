@@ -50,6 +50,11 @@
 }
 
 @layer base {
+  html {
+    /* area overscroll ikut tema, bukan putih bawaan browser */
+    background-color: hsl(var(--background));
+  }
+
   * {
     @apply border-border;
   }
