@@ -56,45 +56,69 @@ import {
   DocumentMetadata,
 } from "@/lib/document-history";
 
-const DEFAULT_CONTENT = `# Welcome to Catatan
+const DEFAULT_CONTENT = `# Selamat datang di Catatan
 
-A zero-knowledge markdown editor with **LaTeX** support.
+Catatan adalah editor markdown untuk menulis dan membagikan catatan secara online.
+Isi catatan **dienkripsi di browser** sebelum dikirim, jadi server tidak bisa membacanya.
 
-## Features
+## Lihat hasilnya di panel kanan
 
-- Side-by-side editing and preview
-- End-to-end encryption
-- LaTeX math support
-- GitHub Flavored Markdown
-- Light and dark themes
+Tulis di panel kiri, pratinjaunya langsung tampil di sebelahnya.
+Di ponsel, gunakan tab **Editor / Preview** untuk bergantian.
 
-## LaTeX Example
+## Cara pakai
 
-Inline math: $E = mc^2$
+1. Tulis catatan di panel kiri.
+2. Klik **Share** untuk membuat link. Ada dua pilihan: **read-only** (hanya membaca) dan **editable** (penerima bisa mengubah).
+3. Setelah dibagikan, klik **Save** setiap kali ada perubahan — link tetap sama.
+4. Toolbar di atas mempercepat format: tebal, miring, judul, daftar, kutipan, blok kode.
+5. Tombol **Export** menyimpan catatan sebagai HTML atau PDF.
 
-Display math:
+## Contoh format
+
+**Tebal**, *miring*, ~~coret~~, dan \`kode inline\`.
+
+- Daftar berbutir
+  - dengan sub-butir
+- Bisa juga berisi [tautan](https://example.com)
+
+1. Daftar bernomor
+2. Urutannya jelas
+
+> Kutipan dipakai untuk menegaskan satu hal penting.
+
+| Fitur | Status |
+| --- | --- |
+| Enkripsi end-to-end | ✓ |
+| Link read-only & editable | ✓ |
+| Export HTML & PDF | ✓ |
+| Rumus LaTeX | ✓ |
+
+## Rumus (LaTeX)
+
+Inline: $E = mc^2$
 
 $$
 \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}
 $$
 
-## Code Example
+## Blok kode
 
 \`\`\`javascript
-function hello(name) {
-  console.log(\`Hello, \${name}!\`);
+function halo(nama) {
+  return \`Halo, \${nama}!\`;
 }
 \`\`\`
 
-## Tables
+---
 
-| Feature | Supported |
-|---------|-----------|
-| Markdown | ✓ |
-| LaTeX | ✓ |
-| Encryption | ✓ |
+## Yang perlu diketahui
 
-Start editing to see your changes!
+- Kunci enkripsi disimpan di bagian \`#\` pada URL dan **tidak pernah dikirim ke server**.
+- Siapa pun yang memegang link read-only bisa membaca; pemegang link editable bisa mengubah isi.
+- Riwayat catatan tersimpan di browser ini (maksimal 50 catatan).
+
+Hapus isi halaman ini, lalu mulai menulis. Selamat mencatat!
 `;
 
 const TOOLBAR: { kind: FormatKind; Icon: typeof Bold; title: string }[] = [
