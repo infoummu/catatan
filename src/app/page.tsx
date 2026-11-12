@@ -883,11 +883,16 @@ export default function Home() {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar: drawer overlay di mobile, kolom tetap di desktop */}
         {sidebarOpen && (
           <>
-            <div className="w-64 border-r border-border bg-card overflow-hidden">
+            <div
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden fixed inset-0 z-20 bg-black/50"
+              aria-hidden="true"
+            />
+            <div className="absolute md:relative inset-y-0 left-0 z-30 w-64 border-r border-border bg-card overflow-hidden shadow-xl md:shadow-none">
               <DocumentSidebar
                 documents={documentHistory}
                 currentDocumentId={documentId}
@@ -895,7 +900,7 @@ export default function Home() {
                 onDeleteDocument={deleteDocument}
               />
             </div>
-            <Separator orientation="vertical" />
+            <Separator orientation="vertical" className="hidden md:block" />
           </>
         )}
 

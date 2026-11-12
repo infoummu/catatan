@@ -64,6 +64,8 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
 - **Tombol `+` di header halaman share** dan tautan "Buat catatan baru" di footer,
   supaya pembaca link bisa langsung membuat catatan sendiri
 - **Perbaikan overscroll**: latar halaman mengikuti tema (KaTeX sebelumnya membuat area putih muncul saat discroll)
+- **Mobile**: daftar dokumen tampil sebagai drawer overlay (sebelumnya menghimpit editor sampai tak terbaca)
+- **Ikon**: tombol sidebar memakai chevron (`‹`), tombol hapus riwayat memakai ikon tempat sampah
 - **Dockerfile + docker-compose** siap pakai (port 8089)
 
 ### Rencana (belum dikerjakan)
