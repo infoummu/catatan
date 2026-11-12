@@ -43,6 +43,10 @@ export function Editor({
   const monacoRef = useRef<any>(null);
   const valueRef = useRef(value);
   const isUserChangeRef = useRef(false);
+  // Tema terbaru: pada mount pertama, prop `theme` bisa masih nilai default
+  // (tema tersimpan baru dibaca setelah hidrasi) — pakai ref agar tidak salah tema.
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   function applyFormat(kind: FormatKind) {
     const editor = editorRef.current;
@@ -211,7 +215,7 @@ export function Editor({
     });
 
     monaco.editor.setTheme(
-      theme === "dark" ? "markdown-dark" : "markdown-light",
+      themeRef.current === "dark" ? "markdown-dark" : "markdown-light",
     );
 
     // Shortcut format
