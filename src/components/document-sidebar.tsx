@@ -70,7 +70,7 @@ export function DocumentSidebar({
                 }}
                 variant="ghost"
                 size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
                 title="Hapus dari riwayat"
                 aria-label="Hapus dari riwayat"
               >
