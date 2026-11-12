@@ -18,7 +18,7 @@ import {
   Copy,
   FilePlus,
   Menu,
-  X,
+  ChevronLeft,
   Sun,
   Moon,
   Bold,
@@ -601,9 +601,19 @@ export default function Home() {
             size="sm"
             variant="ghost"
             className="h-8 w-8 p-0"
+            title={
+              sidebarOpen
+                ? "Sembunyikan daftar catatan"
+                : "Tampilkan daftar catatan"
+            }
+            aria-label={
+              sidebarOpen
+                ? "Sembunyikan daftar catatan"
+                : "Tampilkan daftar catatan"
+            }
           >
             {sidebarOpen ? (
-              <X className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" />
             ) : (
               <Menu className="w-4 h-4" />
             )}

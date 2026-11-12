@@ -3,7 +3,7 @@
 import { DocumentMetadata, removeFromHistory } from "@/lib/document-history";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { FileText, X, Clock } from "lucide-react";
+import { FileText, Trash2, Clock } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface DocumentSidebarProps {
@@ -71,8 +71,10 @@ export function DocumentSidebar({
                 variant="ghost"
                 size="sm"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Hapus dari riwayat"
+                aria-label="Hapus dari riwayat"
               >
-                <X className="w-3 h-3" />
+                <Trash2 className="w-3 h-3" />
               </Button>
             </div>
           </div>
