@@ -65,6 +65,8 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
   supaya pembaca link bisa langsung membuat catatan sendiri
 - **Perbaikan overscroll**: latar halaman mengikuti tema (KaTeX sebelumnya membuat area putih muncul saat discroll)
 - **Mobile**: daftar dokumen tampil sebagai drawer overlay (sebelumnya menghimpit editor sampai tak terbaca)
+- **Mobile**: header diringkas — Export, Akun, tema, Catatan baru, dan daftar dokumen pindah ke menu `⋯`
+  sehingga tidak ada lagi halaman yang bergeser ke samping
 - **Ikon**: tombol sidebar memakai chevron (`‹`), tombol hapus riwayat memakai ikon tempat sampah
 - **Akun opsional (vault passphrase)**: catatan bisa dilanjutkan dari perangkat lain tanpa mengorbankan
   enkripsi — lihat [Akun opsional](#akun-opsional-sinkron-antar-perangkat)

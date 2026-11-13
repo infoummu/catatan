@@ -55,6 +55,11 @@
     background-color: hsl(var(--background));
   }
 
+  body {
+    /* cegah halaman bergeser horizontal di layar kecil */
+    overflow-x: hidden;
+  }
+
   * {
     @apply border-border;
   }

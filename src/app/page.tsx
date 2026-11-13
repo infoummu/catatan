@@ -22,6 +22,7 @@ import {
   Menu,
   ChevronLeft,
   UserRound,
+  MoreVertical,
   Sun,
   Moon,
   Bold,
@@ -162,6 +163,7 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
   const [showVault, setShowVault] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [vaultName, setVaultName] = useState<string | null>(null);
   const editorApi = useRef<EditorHandle | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
@@ -612,7 +614,7 @@ export default function Home() {
 
   return (
     <div
-      className="flex flex-col h-screen bg-background relative"
+      className="flex flex-col h-screen bg-background relative overflow-x-hidden"
       onDragOver={(e) => {
         e.preventDefault();
         setIsDragging(true);
@@ -623,13 +625,13 @@ export default function Home() {
       onDrop={handleDropFile}
     >
       {/* Header */}
-      <header className="border-b border-border px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <header className="border-b border-border px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             size="sm"
             variant="ghost"
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 p-0 shrink-0"
             title={
               sidebarOpen
                 ? "Sembunyikan daftar catatan"
@@ -648,10 +650,10 @@ export default function Home() {
             )}
           </Button>
 
-          <FileText className="w-5 h-5" />
-          <h1 className="text-base font-semibold">Catatan</h1>
+          <FileText className="w-5 h-5 shrink-0" />
+          <h1 className="text-base font-semibold truncate">Catatan</h1>
 
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground ml-1">
+          <span className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground ml-1 shrink-0">
             {!documentId ? (
               "Local draft"
             ) : isSaving ? (
@@ -670,7 +672,7 @@ export default function Home() {
           </span>
 
           {documentId && (
-            <div className="relative ml-4">
+            <div className="relative ml-1 sm:ml-4 shrink-0">
               <Button
                 onClick={() => setShowShareMenu(!showShareMenu)}
                 size="sm"
@@ -729,8 +731,8 @@ export default function Home() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <div className="relative hidden md:block">
             <Button
               onClick={() => setShowExportMenu(!showExportMenu)}
               size="sm"
@@ -776,7 +778,7 @@ export default function Home() {
             onClick={() => setShowVault(true)}
             size="sm"
             variant="ghost"
-            className="h-8 gap-1.5 px-2"
+            className="hidden md:inline-flex h-8 gap-1.5 px-2"
             title={vaultName ? `Akun: ${vaultName}` : "Masuk / buat akun"}
             aria-label={vaultName ? `Akun: ${vaultName}` : "Masuk atau buat akun"}
           >
@@ -793,7 +795,7 @@ export default function Home() {
             onClick={toggleTheme}
             size="sm"
             variant="ghost"
-            className="h-8 w-8 p-0"
+            className="hidden md:inline-flex h-8 w-8 p-0"
             title={
               theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
             }
@@ -811,7 +813,7 @@ export default function Home() {
                 onClick={handleNew}
                 size="sm"
                 variant="outline"
-                className="gap-2"
+                className="hidden md:inline-flex gap-2"
                 title="New document"
               >
                 <FilePlus className="w-4 h-4" />
@@ -850,6 +852,103 @@ export default function Home() {
               </span>
             </Button>
           )}
+
+          {/* Menu ringkas untuk layar kecil */}
+          <div className="relative md:hidden">
+            <Button
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0"
+              title="Menu lainnya"
+              aria-label="Menu lainnya"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+
+            {showMoreMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowMoreMenu(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-md shadow-lg z-20 py-1 text-sm">
+                  {documentId && (
+                    <button
+                      onClick={() => {
+                        handleNew();
+                        setShowMoreMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2"
+                    >
+                      <FilePlus className="w-4 h-4" />
+                      Catatan baru
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setShowVault(true);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2"
+                  >
+                    <UserRound className="w-4 h-4" />
+                    {vaultName ? `Akun: ${vaultName}` : "Masuk / buat akun"}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(!sidebarOpen);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2"
+                  >
+                    <Menu className="w-4 h-4" />
+                    Daftar catatan
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      toggleTheme();
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2"
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="w-4 h-4" />
+                    ) : (
+                      <Moon className="w-4 h-4" />
+                    )}
+                    {theme === "dark" ? "Mode terang" : "Mode gelap"}
+                  </button>
+
+                  <div className="my-1 border-t border-border" />
+
+                  <button
+                    onClick={() => {
+                      handleExportHtml();
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export HTML
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleExportPdf();
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export PDF
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
