@@ -6,6 +6,8 @@ import { Editor } from "@/components/editor";
 import type { EditorHandle, FormatKind } from "@/components/editor";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { Footer } from "@/components/footer";
+import { VaultDialog } from "@/components/vault-dialog";
+import { getVaultSession, pushDocument } from "@/lib/vault";
 import { DocumentSidebar } from "@/components/document-sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -19,6 +21,7 @@ import {
   FilePlus,
   Menu,
   ChevronLeft,
+  UserRound,
   Sun,
   Moon,
   Bold,
@@ -158,6 +161,8 @@ export default function Home() {
   );
   const [isDragging, setIsDragging] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const [showVault, setShowVault] = useState(false);
+  const [vaultName, setVaultName] = useState<string | null>(null);
   const editorApi = useRef<EditorHandle | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
@@ -166,6 +171,16 @@ export default function Home() {
   // Load document history on mount
   useEffect(() => {
     setDocumentHistory(getDocumentHistory());
+    const session = getVaultSession();
+    setVaultName(session?.name ?? null);
+    // Tarik daftar dari akun (kalau ada sesi) agar perangkat baru langsung terisi
+    if (session) {
+      import("@/lib/vault").then(({ pullIntoHistory }) =>
+        pullIntoHistory(session)
+          .then(() => setDocumentHistory(getDocumentHistory()))
+          .catch(() => undefined),
+      );
+    }
   }, []);
 
   // Load document from URL hash on mount and hash changes
@@ -387,6 +402,13 @@ export default function Home() {
       setDocumentHistory(getDocumentHistory());
       setSavedSnapshot(content);
 
+      // Sinkron ke akun (kalau login) — kegagalan tidak mengganggu penyimpanan
+      const session = getVaultSession();
+      if (session) {
+        const meta = getDocumentFromHistory(documentId);
+        if (meta) void pushDocument(session, meta);
+      }
+
       toast({
         title: "Saved",
         description: "Document updated successfully",
@@ -448,6 +470,13 @@ export default function Home() {
 
       setDocumentHistory(getDocumentHistory());
       setSavedSnapshot(content);
+
+      // Kalau sedang login, catatan baru langsung ikut tersinkron
+      const session = getVaultSession();
+      if (session) {
+        const meta = getDocumentFromHistory(id);
+        if (meta) void pushDocument(session, meta);
+      }
 
       // Navigate to the new document URL (with write token)
       window.location.hash = `${id}#${keyString}&write=${token}`;
@@ -744,6 +773,23 @@ export default function Home() {
           </div>
 
           <Button
+            onClick={() => setShowVault(true)}
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 px-2"
+            title={vaultName ? `Akun: ${vaultName}` : "Masuk / buat akun"}
+            aria-label={vaultName ? `Akun: ${vaultName}` : "Masuk atau buat akun"}
+          >
+            <UserRound className="w-4 h-4" />
+            <span className="text-xs hidden sm:inline">
+              {vaultName ?? "Akun"}
+            </span>
+            {vaultName && (
+              <span className="hidden sm:inline h-1.5 w-1.5 rounded-full bg-green-500" />
+            )}
+          </Button>
+
+          <Button
             onClick={toggleTheme}
             size="sm"
             variant="ghost"
@@ -979,6 +1025,19 @@ export default function Home() {
       <div ref={exportRef} className="hidden" aria-hidden="true">
         <MarkdownRenderer content={content} theme={theme} />
       </div>
+
+      <VaultDialog
+        open={showVault}
+        onClose={() => {
+          setShowVault(false);
+          setVaultName(getVaultSession()?.name ?? null);
+          setDocumentHistory(getDocumentHistory());
+        }}
+        onChanged={() => {
+          setDocumentHistory(getDocumentHistory());
+          setVaultName(getVaultSession()?.name ?? null);
+        }}
+      />
 
       <Footer />
     </div>

@@ -50,6 +50,23 @@ export const RATE_LIMITS = {
     interval: 60 * 60 * 1000, // 1 hour
     maxRequests: 100,
   },
+  // Akun opsional (vault)
+  CREATE_VAULT: {
+    interval: 60 * 60 * 1000,
+    maxRequests: 5,
+  },
+  LOGIN_VAULT: {
+    interval: 60 * 60 * 1000,
+    maxRequests: 10,
+  },
+  LOOKUP_VAULT: {
+    interval: 60 * 60 * 1000,
+    maxRequests: 60,
+  },
+  VAULT_SYNC: {
+    interval: 60 * 60 * 1000,
+    maxRequests: 240,
+  },
 } as const;
 
 /**

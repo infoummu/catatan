@@ -66,6 +66,9 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
 - **Perbaikan overscroll**: latar halaman mengikuti tema (KaTeX sebelumnya membuat area putih muncul saat discroll)
 - **Mobile**: daftar dokumen tampil sebagai drawer overlay (sebelumnya menghimpit editor sampai tak terbaca)
 - **Ikon**: tombol sidebar memakai chevron (`‹`), tombol hapus riwayat memakai ikon tempat sampah
+- **Akun opsional (vault passphrase)**: catatan bisa dilanjutkan dari perangkat lain tanpa mengorbankan
+  enkripsi — lihat [Akun opsional](#akun-opsional-sinkron-antar-perangkat)
+- **Backup harian** `data/sqlite.db` (14 salinan terakhir, cron 02:30)
 - **Dockerfile + docker-compose** siap pakai (port 8089)
 
 ### Rencana (belum dikerjakan)
@@ -155,6 +158,55 @@ tombol **Share/Save** akan gagal. Tempatkan di belakang reverse proxy TLS
 | `PUT /api/documents/<id>` | Perbarui ciphertext (butuh write token) |
 
 Rate limit bawaan (in-memory, per IP): 10 pembuatan/jam, 30 update/jam per dokumen, 100 pembacaan/jam.
+
+---
+
+## Akun opsional (sinkron antar perangkat)
+
+Menulis dan membagikan catatan **tidak butuh akun**. Akun hanya perlu kalau ingin melanjutkan catatan
+yang sama dari perangkat lain (laptop → HP).
+
+**Cara pakai:** klik ikon **Akun** di header → *Buat akun* (nama + passphrase) atau *Masuk*.
+Setelah masuk, catatan yang dibuat/disimpan otomatis ikut tersimpan ke akun, dan perangkat lain
+yang login dengan nama + passphrase yang sama akan menerima daftarnya.
+
+**Kenapa tetap zero-knowledge:**
+
+- Passphrase **tidak pernah dikirim** ke server.
+- Dari passphrase diturunkan kunci vault (PBKDF2-SHA256, 310.000 iterasi, salt acak per akun) → AES-GCM 256.
+- Server hanya menyimpan **kunci dokumen yang sudah dibungkus** (`wrapped_key`) dan
+  `verifier = SHA-256(kunci vault)` untuk memeriksa login.
+- Isi catatan tetap ciphertext di tabel `documents`; server tidak memiliki kunci untuk membukanya.
+
+**Konsekuensi yang harus diketahui:**
+
+- Passphrase **tidak bisa direset**. Kalau lupa, kunci dokumen di akun tidak bisa dibuka lagi
+  (catatan di perangkat yang masih login tetap ada).
+- Sesi login berlaku 30 hari dan disimpan di browser; tombol *Keluar* menghapusnya.
+- Kunci vault disimpan di `localStorage` perangkat agar sinkronisasi otomatis bisa berjalan tanpa
+  mengetik passphrase terus. Ini setara risiko daftar lokal yang juga menyimpan kunci dokumen.
+
+Endpoint:
+
+| Route | Keterangan |
+| --- | --- |
+| `POST /api/vaults` | Buat akun (menerima `name`, `salt`, `verifier`) |
+| `GET /api/vaults/<name>` | Ambil salt untuk menurunkan kunci saat login |
+| `POST /api/vaults/<name>/login` | Verifikasi verifier → token sesi 30 hari |
+| `GET/PUT/DELETE /api/vault` | Daftar, simpan, dan hapus item (perlu `Authorization: Bearer <token>`) |
+
+Tabel baru dibuat otomatis di SQLite: `vaults`, `vault_sessions`, `vault_items`.
+Mode PostgreSQL belum mendukung akun (endpoint mengembalikan 501).
+
+### Backup
+
+`scripts/backup-db.js` menyalin database memakai API `backup()` SQLite (aman saat WAL aktif),
+menyimpan 14 salinan terbaru di `backups/`, dijalankan cron tiap hari 02:30.
+Pasang dengan:
+
+```bash
+30 2 * * * cd /root/my_project/markdowngg && node scripts/backup-db.js >> /var/log/markdowngg-backup.log 2>&1
+```
 
 ---
 
