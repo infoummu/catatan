@@ -118,6 +118,36 @@ docker compose up -d --build
 - Aplikasi: <http://localhost:8089> (host 8089 → container 3000)
 - Database: `./data/sqlite.db` (bind mount, persist antar restart)
 
+### Deploy di VPS dengan network `webnet`
+
+Kalau reverse proxy (Nginx Proxy Manager, Traefik, dsb) berada di network Docker tersendiri,
+lampirkan service ke network itu. Contoh yang dipakai di `/opt/dockers/catatan`:
+
+```yaml
+services:
+  web:
+    # ...
+    networks:
+      - webnet
+
+networks:
+  webnet:
+    external: true
+```
+
+Langkah singkat:
+
+```bash
+sudo mkdir -p /opt/dockers/catatan && sudo chown $USER /opt/dockers/catatan
+# salin proyek ke folder tersebut (tanpa node_modules/.next/data)
+cd /opt/dockers/catatan
+mkdir -p data && sudo chown 1000:1000 data
+docker compose up -d --build
+```
+
+Container berjalan sebagai user `node` (uid 1000), jadi folder `data/` **harus** dimiliki uid 1000 —
+kalau tidak, SQLite gagal membuat file database.
+
 Variabel lingkungan penting:
 
 ```env

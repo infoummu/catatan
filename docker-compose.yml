@@ -2,7 +2,7 @@ name: markdowngg
 
 services:
   web:
-    container_name: markdowngg
+    container_name: markdowngg-catatan
     build:
       context: .
       dockerfile: Dockerfile
@@ -19,8 +19,14 @@ services:
       # Fedora/SELinux: izinkan kontainer menulis folder host
       - label=disable
     restart: unless-stopped
+    networks:
+      - webnet
     logging:
       driver: json-file
       options:
         max-size: "5m"
         max-file: "2"
+
+networks:
+  webnet:
+    external: true
