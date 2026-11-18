@@ -99,6 +99,38 @@ export function downloadHtmlFile(title: string, bodyHtml: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/** Unduh markdown mentah sebagai file .md */
+export function downloadMarkdownFile(fileName: string, markdown: string): void {
+  const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName.toLowerCase().endsWith(".md")
+    ? fileName
+    : `${fileName}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/** Gabungkan isi beberapa catatan jadi satu dokumen markdown. */
+export function joinMarkdownDocuments(contents: string[]): string {
+  const body = contents
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join("\n\n---\n\n");
+  return `${body}\n`;
+}
+
+/** Nama file ekspor massal, mis. catatan-semua-2026-11-18.md */
+export function exportAllFileName(date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `catatan-semua-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )}`;
+}
+
 /**
  * PDF dibuat lewat dialog print browser (Save as PDF), bukan library PDF:
  * hasil vektor, teks tetap bisa diseleksi, tanpa menambah ukuran bundle.

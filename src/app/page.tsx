@@ -40,8 +40,16 @@ import {
   PenLine,
   Eye,
   Download,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
-import { downloadHtmlFile, printPdf } from "@/lib/export";
+import {
+  downloadHtmlFile,
+  printPdf,
+  downloadMarkdownFile,
+  joinMarkdownDocuments,
+  exportAllFileName,
+} from "@/lib/export";
 import {
   generateKey,
   exportKey,
@@ -76,7 +84,7 @@ Di ponsel, gunakan tab **Editor / Preview** untuk bergantian.
 2. Klik **Share** untuk membuat link. Ada dua pilihan: **read-only** (hanya membaca) dan **editable** (penerima bisa mengubah).
 3. Setelah dibagikan, klik **Save** setiap kali ada perubahan — link tetap sama.
 4. Toolbar di atas mempercepat format: tebal, miring, judul, daftar, kutipan, blok kode.
-5. Tombol **Export** menyimpan catatan sebagai HTML atau PDF.
+5. Tombol **Export** menyimpan catatan sebagai HTML atau PDF; pilih **Semua catatan (.md)** untuk mengunduh seluruh riwayat sebagai satu file markdown.
 
 ## Contoh format
 
@@ -95,7 +103,8 @@ Di ponsel, gunakan tab **Editor / Preview** untuk bergantian.
 | --- | --- |
 | Enkripsi end-to-end | ✓ |
 | Link read-only & editable | ✓ |
-| Export HTML & PDF | ✓ |
+| Export HTML, PDF & Markdown | ✓ |
+| Zoom teks editor | ✓ |
 | Rumus LaTeX | ✓ |
 
 ## Rumus (LaTeX)
@@ -140,6 +149,12 @@ const TOOLBAR: { kind: FormatKind; Icon: typeof Bold; title: string }[] = [
   { kind: "hr", Icon: Minus, title: "Horizontal rule" },
 ];
 
+// Zoom teks editor
+const MIN_FONT_SIZE = 11;
+const MAX_FONT_SIZE = 28;
+const DEFAULT_FONT_SIZE = 14;
+const FONT_SIZE_STORAGE_KEY = "editor_font_size";
+
 export default function Home() {
   const [content, setContent] = useState(DEFAULT_CONTENT);
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -165,6 +180,9 @@ export default function Home() {
   const [showVault, setShowVault] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [vaultName, setVaultName] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
+  const [isExportingAll, setIsExportingAll] = useState(false);
+  const fontSizeTouched = useRef(false);
   const editorApi = useRef<EditorHandle | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
@@ -184,6 +202,36 @@ export default function Home() {
       );
     }
   }, []);
+
+  // Zoom teks editor: ukuran tersimpan di browser, dibaca setelah hidrasi
+  useEffect(() => {
+    const stored = Number(localStorage.getItem(FONT_SIZE_STORAGE_KEY));
+    if (stored >= MIN_FONT_SIZE && stored <= MAX_FONT_SIZE) {
+      setFontSize(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!fontSizeTouched.current) {
+      fontSizeTouched.current = true;
+      return;
+    }
+    localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
+  }, [fontSize]);
+
+  function zoomEditor(delta: number) {
+    setFontSize((size) =>
+      Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size + delta)),
+    );
+  }
+
+  function handleZoomCommand(cmd: "in" | "out" | "reset") {
+    if (cmd === "reset") {
+      setFontSize(DEFAULT_FONT_SIZE);
+      return;
+    }
+    zoomEditor(cmd === "in" ? 1 : -1);
+  }
 
   // Load document from URL hash on mount and hash changes
   useEffect(() => {
@@ -573,6 +621,67 @@ export default function Home() {
     }
   }
 
+  /**
+   * Ekspor semua catatan di riwayat menjadi satu file .md.
+   * Isi diambil ulang dari server lalu didekripsi di browser (server tetap
+   * tidak pernah menerima kunci), urut dari catatan paling lama.
+   */
+  async function handleExportAllMarkdown() {
+    const docs = [...getDocumentHistory()].sort(
+      (a, b) => a.createdAt - b.createdAt,
+    );
+
+    if (docs.length === 0) {
+      toast({
+        title: "Belum ada catatan tersimpan",
+        description: "Simpan catatan lewat Share agar masuk riwayat",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsExportingAll(true);
+    let failed = 0;
+    const contents: string[] = [];
+
+    try {
+      for (const doc of docs) {
+        try {
+          const response = await fetch(`/api/documents/${doc.id}`);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const { encryptedContent } = await response.json();
+          const key = await importKey(doc.encryptionKey);
+          contents.push(await decrypt(encryptedContent, key));
+        } catch (error) {
+          failed += 1;
+          console.error(`Gagal mengekspor catatan ${doc.id}:`, error);
+        }
+      }
+
+      if (contents.length === 0) {
+        throw new Error("Tidak ada catatan yang bisa diunduh");
+      }
+
+      downloadMarkdownFile(exportAllFileName(), joinMarkdownDocuments(contents));
+
+      toast({
+        title: "Exported",
+        description: `${contents.length} catatan digabung jadi satu file .md${
+          failed ? `, ${failed} dilewati` : ""
+        }`,
+      });
+    } catch (error) {
+      console.error("Export semua gagal:", error);
+      toast({
+        title: "Export failed",
+        description: error instanceof Error ? error.message : "Try again",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExportingAll(false);
+    }
+  }
+
   async function handleDropFile(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setIsDragging(false);
@@ -750,7 +859,7 @@ export default function Home() {
                   className="fixed inset-0 z-10"
                   onClick={() => setShowExportMenu(false)}
                 />
-                <div className="absolute right-0 top-full mt-1 w-40 bg-popover border border-border rounded-md shadow-lg z-20 py-1">
+                <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-md shadow-lg z-20 py-1">
                   <button
                     onClick={() => {
                       handleExportHtml();
@@ -768,6 +877,20 @@ export default function Home() {
                     className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                   >
                     PDF (print)
+                  </button>
+                  <div className="my-1 border-t border-border" />
+                  <button
+                    onClick={() => {
+                      handleExportAllMarkdown();
+                      setShowExportMenu(false);
+                    }}
+                    disabled={isExportingAll}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-50"
+                    title="Gabungkan semua catatan di riwayat jadi satu file .md"
+                  >
+                    {isExportingAll
+                      ? "Menyiapkan…"
+                      : "Semua catatan (.md)"}
                   </button>
                 </div>
               </>
@@ -945,6 +1068,17 @@ export default function Home() {
                     <Download className="w-4 h-4" />
                     Export PDF
                   </button>
+                  <button
+                    onClick={() => {
+                      handleExportAllMarkdown();
+                      setShowMoreMenu(false);
+                    }}
+                    disabled={isExportingAll}
+                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    {isExportingAll ? "Menyiapkan…" : "Export semua (.md)"}
+                  </button>
                 </div>
               </>
             )}
@@ -952,54 +1086,89 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Toolbar format + mode tampilan */}
-      <div className="flex items-center gap-0.5 border-b border-border px-2 py-1 overflow-x-auto">
-        {TOOLBAR.map(({ kind, Icon, title }) => (
-          <button
-            key={kind}
-            title={title}
-            disabled={isReadOnly}
-            onClick={() => editorApi.current?.format(kind)}
-            className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent transition-colors flex-shrink-0"
-          >
-            <Icon className="w-4 h-4" />
-          </button>
-        ))}
+      {/* Toolbar format + zoom + mode tampilan */}
+      <div className="flex items-center gap-1.5 border-b border-border px-2 py-1">
+        {/* Tombol format: area sendiri, bisa digeser bila layar sempit */}
+        <div className="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto">
+          {TOOLBAR.map(({ kind, Icon, title }) => (
+            <button
+              key={kind}
+              title={title}
+              disabled={isReadOnly}
+              onClick={() => editorApi.current?.format(kind)}
+              className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent transition-colors flex-shrink-0"
+            >
+              <Icon className="w-4 h-4" />
+            </button>
+          ))}
+        </div>
 
-        <div className="ml-auto flex items-center gap-0.5 rounded-md border border-border p-0.5 flex-shrink-0">
-          <button
-            onClick={() => setViewMode("split")}
-            title="Split view"
-            className={`h-6 w-7 flex items-center justify-center rounded ${
-              viewMode === "split"
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Columns2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setViewMode("editor")}
-            title="Editor only"
-            className={`h-6 w-7 flex items-center justify-center rounded ${
-              viewMode === "editor"
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <PenLine className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setViewMode("preview")}
-            title="Preview only"
-            className={`h-6 w-7 flex items-center justify-center rounded ${
-              viewMode === "preview"
-                ? "bg-accent text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Eye className="w-3.5 h-3.5" />
-          </button>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Zoom teks editor */}
+          <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
+            <button
+              onClick={() => zoomEditor(-1)}
+              disabled={fontSize <= MIN_FONT_SIZE}
+              title="Perkecil teks editor (Ctrl+-)"
+              aria-label="Perkecil teks editor"
+              className="h-8 w-8 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setFontSize(DEFAULT_FONT_SIZE)}
+              title={`Ukuran teks ${fontSize}px — klik untuk kembali ke ${DEFAULT_FONT_SIZE}px (Ctrl+0)`}
+              aria-label={`Ukuran teks editor ${fontSize} piksel, klik untuk mengatur ulang`}
+              className="h-8 px-1.5 rounded text-[11px] tabular-nums text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              {fontSize}px
+            </button>
+            <button
+              onClick={() => zoomEditor(1)}
+              disabled={fontSize >= MAX_FONT_SIZE}
+              title="Perbesar teks editor (Ctrl+=)"
+              aria-label="Perbesar teks editor"
+              className="h-8 w-8 flex items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
+            <button
+              onClick={() => setViewMode("split")}
+              title="Split view"
+              className={`h-6 w-7 flex items-center justify-center rounded ${
+                viewMode === "split"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Columns2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode("editor")}
+              title="Editor only"
+              className={`h-6 w-7 flex items-center justify-center rounded ${
+                viewMode === "editor"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <PenLine className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setViewMode("preview")}
+              title="Preview only"
+              className={`h-6 w-7 flex items-center justify-center rounded ${
+                viewMode === "preview"
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1058,6 +1227,8 @@ export default function Home() {
               theme={theme}
               readOnly={isReadOnly}
               apiRef={editorApi}
+              fontSize={fontSize}
+              onZoomCommand={handleZoomCommand}
             />
           ) : (
             <div className="h-full overflow-auto">
@@ -1081,6 +1252,8 @@ export default function Home() {
                 theme={theme}
                 readOnly={isReadOnly}
                 apiRef={editorApi}
+                fontSize={fontSize}
+                onZoomCommand={handleZoomCommand}
               />
             </div>
           )}

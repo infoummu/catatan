@@ -18,6 +18,8 @@ export type FormatKind =
   | "codeblock"
   | "hr";
 
+export type ZoomCommand = "in" | "out" | "reset";
+
 export interface EditorHandle {
   format: (kind: FormatKind) => void;
   focus: () => void;
@@ -30,6 +32,10 @@ interface EditorProps {
   readOnly?: boolean;
   /** Diisi oleh editor yang sedang tampil, dipakai toolbar di parent */
   apiRef?: MutableRefObject<EditorHandle | null>;
+  /** Ukuran teks editor (px) — diatur dari toolbar parent */
+  fontSize?: number;
+  /** Ctrl+= / Ctrl+- / Ctrl+0 dari dalam editor */
+  onZoomCommand?: (cmd: ZoomCommand) => void;
 }
 
 export function Editor({
@@ -38,6 +44,8 @@ export function Editor({
   theme = "dark",
   readOnly = false,
   apiRef,
+  fontSize = 14,
+  onZoomCommand,
 }: EditorProps) {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -47,6 +55,9 @@ export function Editor({
   // (tema tersimpan baru dibaca setelah hidrasi) — pakai ref agar tidak salah tema.
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  // Callback zoom bisa berubah; simpan di ref agar command Monaco tetap segar
+  const onZoomCommandRef = useRef(onZoomCommand);
+  onZoomCommandRef.current = onZoomCommand;
 
   function applyFormat(kind: FormatKind) {
     const editor = editorRef.current;
@@ -225,6 +236,20 @@ export function Editor({
     editor.addCommand(KM.CtrlCmd | KC.KeyI, () => applyFormat("italic"));
     editor.addCommand(KM.CtrlCmd | KC.KeyK, () => applyFormat("link"));
 
+    // Shortcut zoom teks: Ctrl+= / Ctrl++ / Ctrl+- / Ctrl+0
+    editor.addCommand(KM.CtrlCmd | KC.Equal, () =>
+      onZoomCommandRef.current?.("in"),
+    );
+    editor.addCommand(KM.CtrlCmd | KM.Shift | KC.Equal, () =>
+      onZoomCommandRef.current?.("in"),
+    );
+    editor.addCommand(KM.CtrlCmd | KC.Minus, () =>
+      onZoomCommandRef.current?.("out"),
+    );
+    editor.addCommand(KM.CtrlCmd | KC.Digit0, () =>
+      onZoomCommandRef.current?.("reset"),
+    );
+
     // Daftarkan API hanya untuk editor yang benar-benar tampil (mobile vs desktop)
     if (apiRef && editor.getDomNode()?.offsetParent !== null) {
       apiRef.current = { format: applyFormat, focus: () => editor.focus() };
@@ -288,14 +313,14 @@ export function Editor({
       onMount={handleEditorDidMount}
       options={{
         minimap: { enabled: false },
-        fontSize: 14,
+        fontSize,
+        lineHeight: Math.round(fontSize * 1.7),
         lineNumbers: "on",
         scrollBeyondLastLine: false,
         automaticLayout: true,
         tabSize: 2,
         wordWrap: "on",
         padding: { top: 16, bottom: 16 },
-        lineHeight: 24,
         fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
         scrollbar: {
           vertical: "visible",

@@ -21,7 +21,7 @@ Repo ini **bukan proyek dari nol**. Asalnya adalah **markdowngg** — <https://g
    hanya ide UX yang diimplementasikan ulang:
    - toolbar format (bold, italic, strikethrough, heading, link, list, quote, code, HR)
    - mode tampilan **Split / Editor only / Preview only**
-   - export dokumen (HTML & PDF)
+   - export dokumen (HTML, PDF & Markdown)
    - drag & drop file `.md` / `.txt`
    - indikator status penyimpanan (Local draft / Saved / Unsaved)
 4. **Packaging Docker** (multi-stage, output Next.js standalone) + `docker-compose.yml` untuk self-hosting.
@@ -53,6 +53,11 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
 - **Toolbar format** 12 tombol + shortcut `Ctrl+B` / `Ctrl+I` / `Ctrl+K`
 - **Mode tampilan** Split / Editor only / Preview only
 - **Export HTML** (file mandiri) dan **PDF** (dialog print browser — hasil vektor, teks tetap bisa diseleksi)
+- **Export semua catatan (.md)**: seluruh isi riwayat digabung urut dari yang paling lama menjadi satu
+  file `catatan-semua-YYYY-MM-DD.md`; isi diambil dari server lalu didekripsi di browser, catatan yang
+  gagal diambil dilewati dan dilaporkan di toast
+- **Zoom teks editor**: tombol `−` / `18px` / `+` di toolbar (klik angka untuk kembali ke 14px),
+  shortcut `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, ukuran tersimpan di `localStorage`
 - **Drag & drop** `.md` / `.txt` (maks 1 MB) dengan overlay petunjuk
 - **Indikator status**: `Local draft` → `Saved` → `Unsaved`
 - **Perbaikan bullet list** di preview (Tailwind Preflight menghapus `list-style`)
@@ -247,7 +252,7 @@ Pasang dengan:
 ```
 src/app/            route Next.js (editor, /s, /view, API)
 src/components/     editor Monaco, renderer markdown, sidebar, document-view
-src/lib/            crypto (AES-GCM), export HTML/PDF, riwayat dokumen, rate limit
+src/lib/            crypto (AES-GCM), export HTML/PDF/Markdown, riwayat dokumen, rate limit
 src/db/             drizzle + inisialisasi SQLite (lazy, auto-create tabel)
 Dockerfile          multi-stage, output Next.js standalone
 docker-compose.yml  service web, port 8089, volume ./data
