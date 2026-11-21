@@ -59,7 +59,12 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
 - **Zoom teks editor**: tombol `−` / `18px` / `+` di toolbar (klik angka untuk kembali ke 14px),
   shortcut `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, ukuran tersimpan di `localStorage`
 - **Drag & drop** `.md` / `.txt` (maks 1 MB) dengan overlay petunjuk
-- **Indikator status**: `Local draft` → `Saved` → `Unsaved`
+- **Indikator status**: `Local draft` / `Belum disimpan` → `Saved` → `Unsaved`
+- **Tombol Clear** (ikon penghapus di header, atau menu `⋯` di ponsel): mengosongkan editor untuk mulai
+  catatan baru. Pada draft langsung kosong tanpa dialog; pada catatan yang sudah tersimpan muncul
+  konfirmasi dulu (versi di server tetap utuh sampai `Save`), plus aksi **Urungkan** di toast.
+- **Share otomatis jadi Save**: begitu ada ketikan pertama pada draft, tombol utama berubah dari
+  `Share` menjadi `Save`; klik = simpan sekaligus buat link. `Ctrl+S` juga bekerja untuk draft baru.
 - **Perbaikan bullet list** di preview (Tailwind Preflight menghapus `list-style`)
 - **Perbaikan warna halaman share**: teks mengikuti tema pembaca (sebelumnya selalu palet gelap sehingga
   nyaris tak terbaca pada tema terang)

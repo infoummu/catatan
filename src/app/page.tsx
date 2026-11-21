@@ -12,6 +12,7 @@ import { DocumentSidebar } from "@/components/document-sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useTheme } from "@/contexts/theme-context";
 import {
   Share2,
@@ -42,6 +43,7 @@ import {
   Download,
   ZoomIn,
   ZoomOut,
+  Eraser,
 } from "lucide-react";
 import {
   downloadHtmlFile,
@@ -80,11 +82,12 @@ Di ponsel, gunakan tab **Editor / Preview** untuk bergantian.
 
 ## Cara pakai
 
-1. Tulis catatan di panel kiri.
-2. Klik **Share** untuk membuat link. Ada dua pilihan: **read-only** (hanya membaca) dan **editable** (penerima bisa mengubah).
-3. Setelah dibagikan, klik **Save** setiap kali ada perubahan — link tetap sama.
-4. Toolbar di atas mempercepat format: tebal, miring, judul, daftar, kutipan, blok kode.
-5. Tombol **Export** menyimpan catatan sebagai HTML atau PDF; pilih **Semua catatan (.md)** untuk mengunduh seluruh riwayat sebagai satu file markdown.
+1. Tulis catatan di panel kiri. Begitu mulai mengetik, tombol **Share** otomatis berganti jadi **Save**.
+2. Klik **Save** untuk menyimpan dan membuat link — link tetap sama untuk setiap perubahan berikutnya.
+3. Bagikan lewat menu **Share** di header: pilihan **read-only** (hanya membaca) atau **editable** (penerima bisa mengubah).
+4. Tombol **Clear** (ikon penghapus) mengosongkan editor untuk mulai catatan baru; pada catatan tersimpan muncul konfirmasi dulu.
+5. Toolbar di atas mempercepat format: tebal, miring, judul, daftar, kutipan, blok kode.
+6. Tombol **Export** menyimpan catatan sebagai HTML atau PDF; pilih **Semua catatan (.md)** untuk mengunduh seluruh riwayat sebagai satu file markdown.
 
 ## Contoh format
 
@@ -182,10 +185,12 @@ export default function Home() {
   const [vaultName, setVaultName] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [isExportingAll, setIsExportingAll] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const clearUndoRef = useRef<string | null>(null);
   const fontSizeTouched = useRef(false);
   const editorApi = useRef<EditorHandle | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
   const { theme, toggleTheme } = useTheme();
 
   // Load document history on mount
@@ -317,15 +322,30 @@ export default function Home() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        if (documentId && encryptionKey && writeToken && !isSaving && !isLoading) {
+        if (isSaving || isLoading) return;
+        if (documentId && !writeToken) return; // read-only
+        if (documentId && encryptionKey && writeToken) {
           handleSave();
+        } else if (
+          !documentId &&
+          content.trim().length > 0 &&
+          content !== DEFAULT_CONTENT
+        ) {
+          handleCreateDocument("save");
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [documentId, encryptionKey, writeToken, isSaving, isLoading, content]);
+  }, [
+    documentId,
+    encryptionKey,
+    writeToken,
+    isSaving,
+    isLoading,
+    content,
+  ]);
 
   // Handle resizing
   useEffect(() => {
@@ -475,8 +495,14 @@ export default function Home() {
     }
   }
 
-  // Create new share (first time or create new document)
-  async function handleShare() {
+  // Tombol utama: dokumen lama → PUT, draft baru → buat dokumen dulu
+  function handlePrimarySave() {
+    if (documentId) return handleSave();
+    return handleCreateDocument("save");
+  }
+
+  // Buat dokumen baru di server (dipakai tombol Share dan Save pertama kali)
+  async function handleCreateDocument(mode: "share" | "save" = "share") {
     try {
       setIsSharing(true);
 
@@ -531,10 +557,19 @@ export default function Home() {
       // Navigate to the new document URL (with write token)
       window.location.hash = `${id}#${keyString}&write=${token}`;
 
-      toast({
-        title: "Document created",
-        description: "You can now share this document with others",
-      });
+
+      toast(
+        mode === "save"
+          ? {
+              title: "Catatan disimpan",
+              description:
+                "Link sudah dibuat — bagikan lewat tombol Share di bagian atas.",
+            }
+          : {
+              title: "Document created",
+              description: "You can now share this document with others",
+            },
+      );
     } catch (error) {
       console.error("Error sharing:", error);
       toast({
@@ -549,14 +584,79 @@ export default function Home() {
 
   // Start a new document
   function handleNew() {
-    // Navigate to home (clear hash)
-    window.location.hash = "";
+    if (window.location.hash) {
+      // Navigate to home (clear hash) — loadFromUrl akan mereset isi editor
+      window.location.hash = "";
+    } else {
+      setDocumentId(null);
+      setEncryptionKey(null);
+      setWriteToken(null);
+      setContent(DEFAULT_CONTENT);
+      setSavedSnapshot(null);
+    }
+    setConfirmClear(false);
 
     toast({
       title: "New document",
       description: "Started a new document",
     });
   }
+
+  // Isi editor berubah: draft tanpa link dianggap "mulai menulis"
+  function handleContentChange(value: string) {
+    setContent(value);
+    // Sudah mengetik lagi setelah Clear → tawaran "Urungkan" tidak relevan
+    if (clearUndoRef.current !== null && value.trim().length > 0) {
+      clearUndoRef.current = null;
+      dismiss();
+    }
+  }
+
+  // Tombol Clear: draft dikosongkan langsung, catatan tersimpan minta konfirmasi
+  function requestClear() {
+    if (!canClear) return;
+    if (documentId) {
+      setConfirmClear(true);
+      return;
+    }
+    applyClear();
+  }
+
+  function applyClear() {
+    clearUndoRef.current = content;
+    setContent("");
+    editorApi.current?.focus();
+    toast({
+      title: "Editor dikosongkan",
+      description: documentId
+        ? "Klik Save untuk menerapkan. Versi tersimpan masih aman di server."
+        : "Editor siap untuk catatan baru.",
+      action: (
+        <ToastAction altText="Urungkan" onClick={undoClear}>
+          Urungkan
+        </ToastAction>
+      ),
+    });
+  }
+
+  function undoClear() {
+    const previous = clearUndoRef.current;
+    if (previous === null) return;
+    clearUndoRef.current = null;
+    setContent(previous);
+    editorApi.current?.focus();
+    toast({ title: "Dipulihkan", description: "Isi editor kembali seperti semula" });
+  }
+
+  // Escape menutup dialog konfirmasi Clear
+  useEffect(() => {
+    if (!confirmClear) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirmClear(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmClear]);
 
   // Load a document from history
   function loadDocument(doc: DocumentMetadata) {
@@ -587,6 +687,13 @@ export default function Home() {
 
   const isReadOnly = documentId !== null && !writeToken;
   const isDirty = documentId !== null && savedSnapshot !== content;
+  // Setelah ketikan pertama pada draft, tombol utama jadi Save
+  const isDraftStarted =
+    documentId === null &&
+    content !== DEFAULT_CONTENT &&
+    content.trim().length > 0;
+  const isSaveMode = documentId !== null || isDraftStarted;
+  const canClear = content.trim().length > 0 && !isReadOnly;
   const docTitle = extractTitle(content);
 
   function exportBodyHtml(): string {
@@ -764,7 +871,14 @@ export default function Home() {
 
           <span className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground ml-1 shrink-0">
             {!documentId ? (
-              "Local draft"
+              isDraftStarted ? (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Belum disimpan
+                </>
+              ) : (
+                "Local draft"
+              )
             ) : isSaving ? (
               "Saving…"
             ) : isDirty ? (
@@ -930,40 +1044,59 @@ export default function Home() {
             )}
           </Button>
 
-          {documentId ? (
-            <>
-              <Button
-                onClick={handleNew}
-                size="sm"
-                variant="outline"
-                className="hidden md:inline-flex gap-2"
-                title="New document"
-              >
-                <FilePlus className="w-4 h-4" />
-                <span className="hidden sm:inline">New</span>
-              </Button>
-              {writeToken ? (
-                <Button
-                  onClick={handleSave}
-                  disabled={isSaving || isLoading}
-                  size="sm"
-                  className="gap-2"
-                  title={isSaving ? "Saving..." : "Save document"}
-                >
-                  <Save className="w-4 h-4" />
-                  <span className="hidden sm:inline">
-                    {isSaving ? "Saving..." : "Save"}
-                  </span>
-                </Button>
-              ) : (
-                <div className="px-3 py-1.5 text-sm text-muted-foreground border border-border rounded-md">
-                  Read Only
-                </div>
-              )}
-            </>
+          <Button
+            onClick={requestClear}
+            disabled={!canClear}
+            size="sm"
+            variant="ghost"
+            className="hidden md:inline-flex h-8 w-8 p-0"
+            title={
+              canClear
+                ? "Kosongkan editor — mulai catatan baru"
+                : "Editor sudah kosong"
+            }
+            aria-label="Kosongkan editor"
+          >
+            <Eraser className="w-4 h-4" />
+          </Button>
+
+          {documentId && (
+            <Button
+              onClick={handleNew}
+              size="sm"
+              variant="outline"
+              className="hidden md:inline-flex gap-2"
+              title="New document"
+            >
+              <FilePlus className="w-4 h-4" />
+              <span className="hidden sm:inline">New</span>
+            </Button>
+          )}
+
+          {documentId && !writeToken ? (
+            <div className="px-3 py-1.5 text-sm text-muted-foreground border border-border rounded-md">
+              Read Only
+            </div>
+          ) : isSaveMode ? (
+            <Button
+              onClick={handlePrimarySave}
+              disabled={isSaving || isSharing || isLoading}
+              size="sm"
+              className="gap-2"
+              title={
+                documentId
+                  ? "Simpan perubahan ke dokumen ini"
+                  : "Simpan catatan dan buat link"
+              }
+            >
+              <Save className="w-4 h-4" />
+              <span className="hidden sm:inline">
+                {isSaving || isSharing ? "Saving..." : "Save"}
+              </span>
+            </Button>
           ) : (
             <Button
-              onClick={handleShare}
+              onClick={() => handleCreateDocument("share")}
               disabled={isSharing || isLoading}
               size="sm"
               className="gap-2"
@@ -996,6 +1129,18 @@ export default function Home() {
                   onClick={() => setShowMoreMenu(false)}
                 />
                 <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-md shadow-lg z-20 py-1 text-sm">
+                  <button
+                    onClick={() => {
+                      requestClear();
+                      setShowMoreMenu(false);
+                    }}
+                    disabled={!canClear}
+                    className="w-full px-3 py-2 text-left hover:bg-accent flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Eraser className="w-4 h-4" />
+                    Kosongkan editor
+                  </button>
+
                   {documentId && (
                     <button
                       onClick={() => {
@@ -1223,7 +1368,7 @@ export default function Home() {
           {activeTab === "editor" ? (
             <Editor
               value={content}
-              onChange={setContent}
+              onChange={handleContentChange}
               theme={theme}
               readOnly={isReadOnly}
               apiRef={editorApi}
@@ -1289,6 +1434,57 @@ export default function Home() {
             <p className="text-xs text-muted-foreground mt-1">
               .md or .txt — max 1 MB
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Konfirmasi Clear: hanya untuk catatan yang sudah tersimpan di server */}
+      {confirmClear && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-title"
+          onClick={() => setConfirmClear(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+                <Eraser className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="clear-title" className="text-sm font-semibold">
+                  Kosongkan editor?
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Isi editor akan dihapus. Catatan yang sudah tersimpan tetap aman
+                  di server sampai kamu menekan{" "}
+                  <span className="font-medium text-foreground">Save</span>.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConfirmClear(false)}
+              >
+                Batal
+              </Button>
+              <Button
+                size="sm"
+                className="bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500"
+                onClick={() => {
+                  applyClear();
+                  setConfirmClear(false);
+                }}
+              >
+                Kosongkan
+              </Button>
+            </div>
           </div>
         </div>
       )}
