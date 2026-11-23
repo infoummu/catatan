@@ -39,7 +39,12 @@ export function DocumentView() {
         const keyString = hashParams.get("write")
           ? hash.split("&")[0] // If write token exists, key is before &
           : hash; // Otherwise, entire hash is the key
-        const tokenString = hashParams.get("write");
+        // Link read-only tidak membawa token. Kalau catatan ini sudah pernah
+        // dibuka di browser ini dengan tokennya, pakai token dari riwayat agar
+        // pemilik tidak kehilangan akses edit dan token tidak terhapus.
+        const historyEntry = getDocumentFromHistory(id);
+        const tokenString =
+          hashParams.get("write") || historyEntry?.writeToken || null;
 
         setEncryptionKey(keyString);
         setWriteToken(tokenString);

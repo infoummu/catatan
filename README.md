@@ -60,6 +60,16 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
   shortcut `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, ukuran tersimpan di `localStorage`
 - **Drag & drop** `.md` / `.txt` (maks 1 MB) dengan overlay petunjuk
 - **Indikator status**: `Local draft` / `Belum disimpan` → `Saved` → `Unsaved`
+- **Autosave 30 detik**: catatan yang sedang dibuka disimpan otomatis ke server setiap 30 detik bila ada
+  perubahan — tanpa toast sukses, hanya memberi tahu kalau gagal. Hanya berjalan pada catatan yang punya
+  write token; link read-only tidak menulis apa pun. Rate limit update dinaikkan ke 240/jam per dokumen
+  supaya autosave tidak kena batas.
+- **Link read-only tidak lagi mengunci pemilik**: membuka link read-only di browser yang menyimpan token
+  edit akan memakai token dari riwayat (sebelumnya token bisa ikut terhapus), jadi catatan tetap bisa
+  diedit. Penerima link melihat banner **Mode baca saja** dengan tombol **Simpan salinan & edit** untuk
+  membuat catatan baru dari isi tersebut.
+- **Konfirmasi hapus**: tombol tempat sampah di daftar catatan menampilkan dialog berisi judul catatan
+  sebelum menghapus dari riwayat (link yang sudah dibagikan tetap hidup).
 - **Tombol Clear** (ikon penghapus di header, atau menu `⋯` di ponsel): mengosongkan editor untuk mulai
   catatan baru. Pada draft langsung kosong tanpa dialog; pada catatan yang sudah tersimpan muncul
   konfirmasi dulu (versi di server tetap utuh sampai `Save`), plus aksi **Urungkan** di toast.

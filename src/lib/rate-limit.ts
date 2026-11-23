@@ -40,10 +40,12 @@ export const RATE_LIMITS = {
     interval: 60 * 60 * 1000, // 1 hour
     maxRequests: 10,
   },
-  // Document updates: 30 updates per hour per document
+  // Document updates: 240 updates per hour per document.
+  // Harus longgar: autosave di editor menyimpan tiap 30 detik (maks 120/jam),
+  // ditambah Save manual. Endpoint tetap dijaga write token per dokumen.
   UPDATE_DOCUMENT: {
     interval: 60 * 60 * 1000, // 1 hour
-    maxRequests: 30,
+    maxRequests: 240,
   },
   // Document retrieval: 100 views per hour per IP
   GET_DOCUMENT: {

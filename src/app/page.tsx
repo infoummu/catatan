@@ -44,6 +44,8 @@ import {
   ZoomIn,
   ZoomOut,
   Eraser,
+  Trash2,
+  Lock,
 } from "lucide-react";
 import {
   downloadHtmlFile,
@@ -83,8 +85,8 @@ Di ponsel, gunakan tab **Editor / Preview** untuk bergantian.
 ## Cara pakai
 
 1. Tulis catatan di panel kiri. Begitu mulai mengetik, tombol **Share** otomatis berganti jadi **Save**.
-2. Klik **Save** untuk menyimpan dan membuat link — link tetap sama untuk setiap perubahan berikutnya.
-3. Bagikan lewat menu **Share** di header: pilihan **read-only** (hanya membaca) atau **editable** (penerima bisa mengubah).
+2. Klik **Save** untuk menyimpan dan membuat link — link tetap sama untuk setiap perubahan berikutnya. Setelah itu catatan tersimpan **otomatis tiap 30 detik** selama ada perubahan.
+3. Bagikan lewat menu **Share** di header: pilihan **read-only** (hanya membaca) atau **editable** (penerima bisa mengubah). Link read-only tetap menampilkan versi terbaru; kamu tetap bisa mengedit dari **daftar catatan** di browser ini.
 4. Tombol **Clear** (ikon penghapus) mengosongkan editor untuk mulai catatan baru; pada catatan tersimpan muncul konfirmasi dulu.
 5. Toolbar di atas mempercepat format: tebal, miring, judul, daftar, kutipan, blok kode.
 6. Tombol **Export** menyimpan catatan sebagai HTML atau PDF; pilih **Semua catatan (.md)** untuk mengunduh seluruh riwayat sebagai satu file markdown.
@@ -158,6 +160,9 @@ const MAX_FONT_SIZE = 28;
 const DEFAULT_FONT_SIZE = 14;
 const FONT_SIZE_STORAGE_KEY = "editor_font_size";
 
+// Autosave: catatan yang sedang dibuka disimpan otomatis tiap 30 detik
+const AUTOSAVE_INTERVAL_MS = 30_000;
+
 export default function Home() {
   const [content, setContent] = useState(DEFAULT_CONTENT);
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -186,7 +191,16 @@ export default function Home() {
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [isExportingAll, setIsExportingAll] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [autosavedAt, setAutosavedAt] = useState<number | null>(null);
   const clearUndoRef = useRef<string | null>(null);
+  const contentRef = useRef(content);
+  const savedSnapshotRef = useRef(savedSnapshot);
+  const isSavingRef = useRef(isSaving);
+  const saveRef = useRef<
+    ((options?: { silent?: boolean }) => Promise<void>) | null
+  >(null);
+  const autoSaveFailedRef = useRef(false);
   const fontSizeTouched = useRef(false);
   const editorApi = useRef<EditorHandle | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
@@ -265,7 +279,11 @@ export default function Home() {
       const keyString = hashParams.get("write")
         ? keyAndToken.split("&")[0]
         : keyAndToken;
-      const tokenString = hashParams.get("write");
+      // Link read-only sengaja tidak membawa token edit. Kalau dokumen ini
+      // pernah dibuka di browser ini lengkap dengan tokennya, pakai token dari
+      // riwayat supaya pemilik catatan tidak terkunci di mode baca saja.
+      const storedEntry = getDocumentFromHistory(id);
+      const tokenString = hashParams.get("write") || storedEntry?.writeToken || null;
 
       try {
         setIsLoading(true);
@@ -291,7 +309,7 @@ export default function Home() {
         saveToHistory({
           id,
           encryptionKey: keyString,
-          writeToken: tokenString || "",
+          writeToken: tokenString || existing?.writeToken || "",
           title: extractTitle(decryptedContent),
           createdAt: existing?.createdAt ?? Date.now(),
           lastModified: Date.now(),
@@ -432,9 +450,10 @@ export default function Home() {
     }
   }
 
-  // Save updates to existing document
-  async function handleSave() {
+  // Save updates to existing document. `silent` dipakai autosave: tanpa toast sukses.
+  async function handleSave(options: { silent?: boolean } = {}) {
     if (!documentId || !encryptionKey) return;
+    const silent = options.silent === true;
 
     try {
       setIsSaving(true);
@@ -471,6 +490,8 @@ export default function Home() {
 
       setDocumentHistory(getDocumentHistory());
       setSavedSnapshot(content);
+      setAutosavedAt(Date.now());
+      autoSaveFailedRef.current = false;
 
       // Sinkron ke akun (kalau login) — kegagalan tidak mengganggu penyimpanan
       const session = getVaultSession();
@@ -479,17 +500,27 @@ export default function Home() {
         if (meta) void pushDocument(session, meta);
       }
 
-      toast({
-        title: "Saved",
-        description: "Document updated successfully",
-      });
+      if (!silent) {
+        toast({
+          title: "Saved",
+          description: "Document updated successfully",
+        });
+      }
     } catch (error) {
       console.error("Error saving:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save document",
-        variant: "destructive",
-      });
+      const message =
+        error instanceof Error ? error.message : "Failed to save document";
+      // Autosave yang gagal hanya diberitahu sekali per rangkaian kegagalan
+      if (!silent || !autoSaveFailedRef.current) {
+        autoSaveFailedRef.current = true;
+        toast({
+          title: silent ? "Autosave gagal" : "Error",
+          description: silent
+            ? `${message} — coba tekan Save manual.`
+            : message,
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -500,6 +531,37 @@ export default function Home() {
     if (documentId) return handleSave();
     return handleCreateDocument("save");
   }
+
+  // Simpan referensi terbaru supaya interval autosave tidak ter-reset tiap ketikan
+  useEffect(() => {
+    saveRef.current = handleSave;
+  });
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+  useEffect(() => {
+    savedSnapshotRef.current = savedSnapshot;
+  }, [savedSnapshot]);
+  useEffect(() => {
+    isSavingRef.current = isSaving;
+  }, [isSaving]);
+
+  // Autosave: catatan yang sedang dibuka disimpan tiap 30 detik bila ada perubahan.
+  // Hanya berjalan untuk catatan yang punya write token (bukan mode baca saja)
+  // dan tidak menyimpan editor yang sengaja dikosongkan (alur Clear tetap manual).
+  useEffect(() => {
+    if (!documentId || !writeToken || !encryptionKey) return;
+
+    const timer = window.setInterval(() => {
+      if (isSavingRef.current) return;
+      const current = contentRef.current;
+      if (current === savedSnapshotRef.current) return;
+      if (current.trim().length === 0) return;
+      void saveRef.current?.({ silent: true });
+    }, AUTOSAVE_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [documentId, writeToken, encryptionKey]);
 
   // Buat dokumen baru di server (dipakai tombol Share dan Save pertama kali)
   async function handleCreateDocument(mode: "share" | "save" = "share") {
@@ -648,15 +710,18 @@ export default function Home() {
     toast({ title: "Dipulihkan", description: "Isi editor kembali seperti semula" });
   }
 
-  // Escape menutup dialog konfirmasi Clear
+  // Escape menutup dialog konfirmasi Clear / Hapus
   useEffect(() => {
-    if (!confirmClear) return;
+    if (!confirmClear && !confirmDeleteId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setConfirmClear(false);
+      if (e.key === "Escape") {
+        setConfirmClear(false);
+        setConfirmDeleteId(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [confirmClear]);
+  }, [confirmClear, confirmDeleteId]);
 
   // Load a document from history
   function loadDocument(doc: DocumentMetadata) {
@@ -669,7 +734,11 @@ export default function Home() {
     setSidebarOpen(false);
   }
 
-  // Delete a document from history
+  // Hapus catatan: selalu lewat dialog konfirmasi dulu
+  function requestDeleteDocument(id: string) {
+    setConfirmDeleteId(id);
+  }
+
   function deleteDocument(id: string) {
     removeFromHistory(id);
     setDocumentHistory(getDocumentHistory());
@@ -679,13 +748,18 @@ export default function Home() {
       handleNew();
     }
 
+    setConfirmDeleteId(null);
+
     toast({
-      title: "Document removed",
-      description: "Removed from your history",
+      title: "Catatan dihapus",
+      description: "Dihapus dari daftar di perangkat ini",
     });
   }
 
   const isReadOnly = documentId !== null && !writeToken;
+  const deleteTarget = confirmDeleteId
+    ? documentHistory.find((doc) => doc.id === confirmDeleteId) ?? null
+    : null;
   const isDirty = documentId !== null && savedSnapshot !== content;
   // Setelah ketikan pertama pada draft, tombol utama jadi Save
   const isDraftStarted =
@@ -869,7 +943,16 @@ export default function Home() {
           <FileText className="w-5 h-5 shrink-0" />
           <h1 className="text-base font-semibold truncate">Catatan</h1>
 
-          <span className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground ml-1 shrink-0">
+          <span
+            className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground ml-1 shrink-0"
+            title={
+              autosavedAt
+                ? `Penyimpanan terakhir: ${new Date(autosavedAt).toLocaleTimeString(
+                    "id-ID",
+                  )}`
+                : undefined
+            }
+          >
             {!documentId ? (
               isDraftStarted ? (
                 <>
@@ -1317,6 +1400,38 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Mode baca saja: jelaskan kenapa tidak bisa diedit + jalan keluarnya */}
+      {isReadOnly && (
+        <div className="flex flex-col gap-1.5 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-1.5">
+          <span className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-300">
+            <Lock className="w-3.5 h-3.5" /> Mode baca saja
+          </span>
+          <span className="min-w-0 flex-1 text-muted-foreground">
+            Link read-only sengaja tidak membawa token edit. Kalau ini catatanmu,
+            buka dari{" "}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              daftar catatan
+            </button>{" "}
+            — token editnya tersimpan di browser ini. Kalau kamu penerima link,
+            simpan salinan dulu untuk bisa mengedit.
+          </span>
+          <Button
+            onClick={() => handleCreateDocument("save")}
+            disabled={isSharing || isLoading}
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 px-2 shrink-0 self-start sm:self-auto"
+            title="Buat catatan baru berisi isi ini, lalu edit sesukamu"
+          >
+            <Copy className="w-3 h-3" />
+            <span>{isSharing ? "Menyimpan…" : "Simpan salinan & edit"}</span>
+          </Button>
+        </div>
+      )}
+
       {/* Mobile Tabs (visible on small screens) */}
       <div className="md:hidden flex border-b border-border">
         <button
@@ -1356,7 +1471,7 @@ export default function Home() {
                 documents={documentHistory}
                 currentDocumentId={documentId}
                 onSelectDocument={loadDocument}
-                onDeleteDocument={deleteDocument}
+                onDeleteDocument={requestDeleteDocument}
               />
             </div>
             <Separator orientation="vertical" className="hidden md:block" />
@@ -1483,6 +1598,57 @@ export default function Home() {
                 }}
               >
                 Kosongkan
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Konfirmasi hapus catatan dari daftar */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-title"
+          onClick={() => setConfirmDeleteId(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-border bg-card p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-400">
+                <Trash2 className="w-4 h-4" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="delete-title" className="text-sm font-semibold">
+                  Hapus catatan ini?
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground break-words">
+                    {deleteTarget.title}
+                  </span>{" "}
+                  akan dihapus dari daftar di perangkat ini. Link yang sudah
+                  dibagikan tetap bisa dibuka karena isinya masih tersimpan di
+                  server.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConfirmDeleteId(null)}
+              >
+                Batal
+              </Button>
+              <Button
+                size="sm"
+                className="bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500"
+                onClick={() => deleteDocument(deleteTarget.id)}
+              >
+                Hapus
               </Button>
             </div>
           </div>
