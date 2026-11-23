@@ -7,7 +7,7 @@ import type { EditorHandle, FormatKind } from "@/components/editor";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { Footer } from "@/components/footer";
 import { VaultDialog } from "@/components/vault-dialog";
-import { getVaultSession, pushDocument } from "@/lib/vault";
+import { getVaultSession, pushDocument, removeFromVault } from "@/lib/vault";
 import { DocumentSidebar } from "@/components/document-sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -192,6 +192,7 @@ export default function Home() {
   const [isExportingAll, setIsExportingAll] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [autosavedAt, setAutosavedAt] = useState<number | null>(null);
   const clearUndoRef = useRef<string | null>(null);
   const contentRef = useRef(content);
@@ -645,7 +646,7 @@ export default function Home() {
   }
 
   // Start a new document
-  function handleNew() {
+  function handleNew(silent = false) {
     if (window.location.hash) {
       // Navigate to home (clear hash) — loadFromUrl akan mereset isi editor
       window.location.hash = "";
@@ -658,10 +659,12 @@ export default function Home() {
     }
     setConfirmClear(false);
 
-    toast({
-      title: "New document",
-      description: "Started a new document",
-    });
+    if (!silent) {
+      toast({
+        title: "New document",
+        description: "Started a new document",
+      });
+    }
   }
 
   // Isi editor berubah: draft tanpa link dianggap "mulai menulis"
@@ -734,26 +737,94 @@ export default function Home() {
     setSidebarOpen(false);
   }
 
-  // Hapus catatan: selalu lewat dialog konfirmasi dulu
+  // Hapus catatan: hapus dari perangkat, akun, dan server (permanen)
   function requestDeleteDocument(id: string) {
     setConfirmDeleteId(id);
   }
 
-  function deleteDocument(id: string) {
-    removeFromHistory(id);
-    setDocumentHistory(getDocumentHistory());
+  async function deleteDocument(id: string) {
+    if (isDeleting) return;
 
-    // If it's the current document, clear it
-    if (documentId === id) {
-      handleNew();
+    const meta = getDocumentFromHistory(id);
+    const session = getVaultSession();
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(`/api/documents/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
+        },
+        body: JSON.stringify({
+          writeToken: meta?.writeToken || undefined,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        // Tanpa write token, server tidak bisa memastikan kepemilikan sehingga
+        // menolak menghapus. Salinan lokal (dan item akun) tetap dibersihkan
+        // supaya catatan tidak muncul lagi saat sinkronisasi.
+        if (response.status === 403) {
+          if (session) {
+            await removeFromVault(session, id);
+          }
+          removeFromHistory(id);
+          setDocumentHistory(getDocumentHistory());
+          if (documentId === id) handleNew(true);
+          setConfirmDeleteId(null);
+          toast({
+            title: "Dihapus dari perangkat ini",
+            description: `${data.error || "Server tidak mengizinkan penghapusan."}${
+              session
+                ? " Item di akun juga dibersihkan agar tidak muncul lagi saat sinkronisasi."
+                : ""
+            }`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        throw new Error(data.error || "Gagal menghapus catatan dari server");
+      }
+
+      // Server sudah menghapus dokumen dan menandai item vault sebagai
+      // tombstone. Bersihkan sisa item di akun (kalau sedang login).
+      if (session) {
+        await removeFromVault(session, id);
+      }
+
+      removeFromHistory(id);
+      setDocumentHistory(getDocumentHistory());
+
+      // If it's the current document, clear it
+      if (documentId === id) {
+        handleNew(true);
+      }
+
+      setConfirmDeleteId(null);
+
+      toast({
+        title: "Catatan dihapus permanen",
+        description:
+          "Dihapus dari perangkat ini dan dari server. Link yang sudah dibagikan tidak bisa dibuka lagi.",
+      });
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Gagal menghapus catatan dari server";
+      toast({
+        title: "Gagal menghapus",
+        description: `${message} — catatan masih ada di daftar, coba lagi.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
     }
-
-    setConfirmDeleteId(null);
-
-    toast({
-      title: "Catatan dihapus",
-      description: "Dihapus dari daftar di perangkat ini",
-    });
   }
 
   const isReadOnly = documentId !== null && !writeToken;
@@ -1145,7 +1216,7 @@ export default function Home() {
 
           {documentId && (
             <Button
-              onClick={handleNew}
+              onClick={() => handleNew()}
               size="sm"
               variant="outline"
               className="hidden md:inline-flex gap-2"
@@ -1623,15 +1694,15 @@ export default function Home() {
               </span>
               <div className="min-w-0">
                 <h2 id="delete-title" className="text-sm font-semibold">
-                  Hapus catatan ini?
+                  Hapus catatan ini permanen?
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   <span className="font-medium text-foreground break-words">
                     {deleteTarget.title}
                   </span>{" "}
-                  akan dihapus dari daftar di perangkat ini. Link yang sudah
-                  dibagikan tetap bisa dibuka karena isinya masih tersimpan di
-                  server.
+                  akan dihapus dari perangkat ini, dari akun (bila sedang login),
+                  dan dari server. Link yang sudah dibagikan tidak bisa dibuka
+                  lagi. Tindakan ini tidak bisa dibatalkan.
                 </p>
               </div>
             </div>
@@ -1640,6 +1711,7 @@ export default function Home() {
                 size="sm"
                 variant="outline"
                 onClick={() => setConfirmDeleteId(null)}
+                disabled={isDeleting}
               >
                 Batal
               </Button>
@@ -1647,8 +1719,9 @@ export default function Home() {
                 size="sm"
                 className="bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500"
                 onClick={() => deleteDocument(deleteTarget.id)}
+                disabled={isDeleting}
               >
-                Hapus
+                {isDeleting ? "Menghapus…" : "Hapus permanen"}
               </Button>
             </div>
           </div>

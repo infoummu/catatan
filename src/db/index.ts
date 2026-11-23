@@ -69,12 +69,23 @@ function createDatabase(): DbBundle {
       wrapped_token TEXT,
       title TEXT,
       updated_at INTEGER NOT NULL,
+      deleted INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (vault_name, doc_id)
     );
 
     CREATE INDEX IF NOT EXISTS idx_vault_items_name ON vault_items (vault_name);
     CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON vault_sessions (expires_at);
   `);
+
+  // Migrasi database lama: tambahkan kolom tombstone untuk sinkronisasi hapus.
+  const vaultItemColumns = sqlite
+    .prepare("PRAGMA table_info(vault_items)")
+    .all() as { name: string }[];
+  if (!vaultItemColumns.some((column) => column.name === "deleted")) {
+    sqlite.exec(
+      "ALTER TABLE vault_items ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+    );
+  }
 
   return { db: drizzleSqlite(sqlite), documents: documentsLite, sqlite };
 }

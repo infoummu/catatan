@@ -68,8 +68,10 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
   edit akan memakai token dari riwayat (sebelumnya token bisa ikut terhapus), jadi catatan tetap bisa
   diedit. Penerima link melihat banner **Mode baca saja** dengan tombol **Simpan salinan & edit** untuk
   membuat catatan baru dari isi tersebut.
-- **Konfirmasi hapus**: tombol tempat sampah di daftar catatan menampilkan dialog berisi judul catatan
-  sebelum menghapus dari riwayat (link yang sudah dibagikan tetap hidup).
+- **Hapus permanen**: tombol tempat sampah di daftar catatan menampilkan konfirmasi berisi judul,
+  lalu menghapus ciphertext dari server, menandai item akun sebagai *tombstone*, dan membersihkan
+  riwayat lokal. Link yang sudah dibagikan tidak bisa dibuka lagi dan catatan tidak muncul kembali
+  saat refresh/sinkronisasi.
 - **Tombol Clear** (ikon penghapus di header, atau menu `⋯` di ponsel): mengosongkan editor untuk mulai
   catatan baru. Pada draft langsung kosong tanpa dialog; pada catatan yang sudah tersimpan muncul
   konfirmasi dulu (versi di server tetap utuh sampai `Save`), plus aksi **Urungkan** di toast.
@@ -87,7 +89,7 @@ Tidak ada afiliasi dengan markdowngg maupun mymarkdown.xyz. Kredit lengkap ada d
 - **Mobile**: daftar dokumen tampil sebagai drawer overlay (sebelumnya menghimpit editor sampai tak terbaca)
 - **Mobile**: header diringkas — Export, Akun, tema, Catatan baru, dan daftar dokumen pindah ke menu `⋯`
   sehingga tidak ada lagi halaman yang bergeser ke samping
-- **Ikon**: tombol sidebar memakai chevron (`‹`), tombol hapus riwayat memakai ikon tempat sampah
+- **Ikon**: tombol sidebar memakai chevron (`‹`), tombol hapus catatan memakai ikon tempat sampah
 - **Akun opsional (vault passphrase)**: catatan bisa dilanjutkan dari perangkat lain tanpa mengorbankan
   enkripsi — lihat [Akun opsional](#akun-opsional-sinkron-antar-perangkat)
 - **Backup harian** `data/sqlite.db` (14 salinan terakhir, cron 02:30)
@@ -208,8 +210,19 @@ tombol **Share/Save** akan gagal. Tempatkan di belakang reverse proxy TLS
 | `POST /api/documents` | Simpan dokumen baru (ciphertext + hash write token) |
 | `GET /api/documents/<id>` | Ambil ciphertext |
 | `PUT /api/documents/<id>` | Perbarui ciphertext (butuh write token) |
+| `DELETE /api/documents/<id>` | Hapus permanen dokumen (butuh write token) |
 
-Rate limit bawaan (in-memory, per IP): 10 pembuatan/jam, 30 update/jam per dokumen, 100 pembacaan/jam.
+Rate limit bawaan (in-memory, per IP): 10 pembuatan/jam, 240 update/jam per dokumen, 100 pembacaan/jam,
+30 penghapusan/jam.
+
+**Hapus permanen:** tombol hapus di daftar **Your Documents** menghapus ciphertext dokumen dari
+server, lalu menandai item vault sebagai *tombstone* (`vault_items.deleted = 1`). Tombstone membuat
+perangkat lain yang masih menyimpan salinan lokal ikut menghapusnya saat sinkronisasi dan mencegah
+salinan lama diunggah kembali. Link yang sudah dibagikan berhenti berfungsi setelah dihapus.
+Penghapusan di server hanya memakai **write token** sebagai bukti kepemilikan (sesi akun tidak
+memberi hak menghapus dokumen orang lain). Dokumen tanpa write token — misalnya yang hanya dibuka
+lewat link read-only — dibersihkan dari perangkat dan akun, tetapi salinan di server serta link
+lamanya tetap ada.
 
 ---
 
@@ -245,7 +258,7 @@ Endpoint:
 | `POST /api/vaults` | Buat akun (menerima `name`, `salt`, `verifier`) |
 | `GET /api/vaults/<name>` | Ambil salt untuk menurunkan kunci saat login |
 | `POST /api/vaults/<name>/login` | Verifikasi verifier → token sesi 30 hari |
-| `GET/PUT/DELETE /api/vault` | Daftar, simpan, dan hapus item (perlu `Authorization: Bearer <token>`) |
+| `GET/PUT/DELETE /api/vault` | Daftar, simpan, dan hapus item (perlu `Authorization: Bearer <token>`; hapus = tombstone) |
 
 Tabel baru dibuat otomatis di SQLite: `vaults`, `vault_sessions`, `vault_items`.
 Mode PostgreSQL belum mendukung akun (endpoint mengembalikan 501).

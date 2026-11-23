@@ -10,6 +10,7 @@ import {
 import {
   getDocumentHistory,
   saveToHistory,
+  removeFromHistory,
   DocumentMetadata,
 } from "@/lib/document-history";
 
@@ -28,6 +29,8 @@ export interface VaultItem {
   wrappedToken: string | null;
   title: string | null;
   updatedAt: number;
+  /** true bila catatan sudah dihapus dan hanya tersisa sebagai tombstone */
+  deleted?: boolean;
 }
 
 export function getVaultSession(): VaultSession | null {
@@ -137,8 +140,12 @@ export async function loginVault(
   return { session };
 }
 
-export async function listVaultItems(token: string): Promise<VaultItem[]> {
-  const res = await authFetch("/api/vault", token);
+export async function listVaultItems(
+  token: string,
+  includeDeleted = false,
+): Promise<VaultItem[]> {
+  const query = includeDeleted ? "?includeDeleted=1" : "";
+  const res = await authFetch(`/api/vault${query}`, token);
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data.items) ? data.items : [];
@@ -193,15 +200,26 @@ export async function pushAllLocal(session: VaultSession): Promise<number> {
 /** Tarik daftar dari vault, gabungkan ke riwayat lokal */
 export async function pullIntoHistory(
   session: VaultSession,
-): Promise<{ added: number; updated: number; failed: number }> {
+): Promise<{ added: number; updated: number; removed: number; failed: number }> {
   const key = await sessionKey(session);
-  const items = await listVaultItems(session.token);
+  const items = await listVaultItems(session.token, true);
 
   let added = 0;
   let updated = 0;
+  let removed = 0;
   let failed = 0;
 
   for (const item of items) {
+    // Tombstone: catatan sudah dihapus (dari perangkat ini atau perangkat
+    // lain). Buang salinan lokal supaya tidak muncul lagi saat sinkronisasi.
+    if (item.deleted) {
+      if (getDocumentHistory().some((d) => d.id === item.docId)) {
+        removeFromHistory(item.docId);
+        removed++;
+      }
+      continue;
+    }
+
     const encryptionKey = await unwrapSecret(item.wrappedKey, key);
     if (!encryptionKey) {
       failed++;
@@ -230,15 +248,22 @@ export async function pullIntoHistory(
     else added++;
   }
 
-  return { added, updated, failed };
+  return { added, updated, removed, failed };
 }
 
-export async function removeFromVault(session: VaultSession, docId: string) {
+/** Tandai dokumen sebagai terhapus di vault (tombstone). */
+export async function removeFromVault(
+  session: VaultSession,
+  docId: string,
+): Promise<boolean> {
   try {
-    await authFetch(`/api/vault?docId=${encodeURIComponent(docId)}`, session.token, {
-      method: "DELETE",
-    });
+    const res = await authFetch(
+      `/api/vault?docId=${encodeURIComponent(docId)}`,
+      session.token,
+      { method: "DELETE" },
+    );
+    return res.ok;
   } catch {
-    /* diamkan — penghapusan lokal tetap jalan */
+    return false;
   }
 }

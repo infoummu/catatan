@@ -77,7 +77,7 @@ export function VaultDialog({ open, onClose, onChanged }: VaultDialogProps) {
 
       toast({
         title: mode === "signup" ? "Akun dibuat" : "Berhasil masuk",
-        description: `${pulled.added} catatan masuk, ${pushed} catatan tersinkron`,
+        description: `${pulled.added} catatan masuk, ${pulled.removed} dihapus, ${pushed} catatan tersinkron`,
       });
       onClose();
     } catch (err) {
@@ -97,7 +97,7 @@ export function VaultDialog({ open, onClose, onChanged }: VaultDialogProps) {
       const pushed = await pushAllLocal(session);
       onChanged();
       setInfo(
-        `${pulled.added} baru, ${pulled.updated} diperbarui dari akun · ${pushed} terkirim`,
+        `${pulled.added} baru, ${pulled.updated} diperbarui, ${pulled.removed} dihapus dari akun · ${pushed} terkirim`,
       );
     } catch {
       setError("Sinkronisasi gagal. Periksa koneksi.");

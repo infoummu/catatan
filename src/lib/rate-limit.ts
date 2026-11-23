@@ -52,6 +52,11 @@ export const RATE_LIMITS = {
     interval: 60 * 60 * 1000, // 1 hour
     maxRequests: 100,
   },
+  // Document deletion: 30 deletions per hour per IP + document
+  DELETE_DOCUMENT: {
+    interval: 60 * 60 * 1000, // 1 hour
+    maxRequests: 30,
+  },
   // Akun opsional (vault)
   CREATE_VAULT: {
     interval: 60 * 60 * 1000,
